@@ -1,0 +1,9 @@
+[Unit]
+Description=website
+
+[Service]
+ExecStart=/home/pi/website/app.py
+Restart=always
+
+[Install]
+WantedBy=default.target

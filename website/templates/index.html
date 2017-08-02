@@ -1,0 +1,25 @@
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Video Player</title>
+</head>
+<body>
+<form action="/action" method="get">
+<input name="url" size="100" value="{{url}}"><br>
+<input type="submit" name="open" value="Open Player">
+<input type="submit" name="browser" value="Open in Browser">
+</form>
+{% if done %}
+<h2 id="done_label">Action completed</h2>
+<script>
+setTimeout('document.getElementById("done_label").style.color="lightgray"', 2000);
+</script>
+{% endif %}
+<p>
+Bookmark this: <a href="javascript:(function(){location.href='{{base}}?url='+encodeURIComponent(location.href);})()">Play on TV</a>
+<br>
+<textarea rows="5" cols="35">
+javascript:(function(){location.href='{{base}}?url='+encodeURIComponent(location.href);})()
+</textarea>
+</body>
+</html>
