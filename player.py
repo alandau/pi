@@ -282,6 +282,7 @@ class MainWindow(tk.Tk):
         fr.grid(row=1, column=1)
         tk.Button(fr, text="Play directly", command=self.cmd_playlist_play_directly).pack(side=tk.LEFT)
         tk.Button(fr, text="Play Youtube", command=self.cmd_playlist_play_youtube).pack(side=tk.LEFT)
+        tk.Button(fr, text='Get Youtube playlist', command=self.cmd_playlist_get_youtube_playlist).pack(side=tk.LEFT)
         tk.Button(fr, text="Save playlist", command=self.cmd_playlist_save).pack(side=tk.LEFT)
 
         self.load_playlists()
@@ -319,9 +320,9 @@ class MainWindow(tk.Tk):
         if not sel:
             return
         self.play_youtube(self.playlistData[sel[0]]['url'])
-    def cmd_get_youtube_playlist(self):
+    def get_youtube_playlist(self, url):
         try:
-            jsonstr = subprocess.check_output('youtube-dl --flat-playlist --yes-playlist -J -- "%s"' % self.text.get(), shell=True).strip()
+            jsonstr = subprocess.check_output('youtube-dl --flat-playlist --yes-playlist -J -- "%s"' % url, shell=True).strip()
         except subprocess.CalledProcessError as e:
             tkMessageBox.showerror('Youtube', "Can't get playlist: %s" % e.output)
             return
@@ -341,6 +342,13 @@ class MainWindow(tk.Tk):
         except KeyError as e:
             tkMessageBox('Youtube', "Can't decode playlist: %s" % e)
             return
+    def cmd_get_youtube_playlist(self):
+        self.get_youtube_playlist(self.text.get().strip())
+    def cmd_playlist_get_youtube_playlist(self):
+        sel = self.playlist.curselection()
+        if not sel:
+            return
+        self.get_youtube_playlist(self.playlistData[sel[0]]['url'])
     def cmd_add_to_playlist(self):
         url = self.text.get().strip()
         self.playlistData.append(dict(url=url, title=url))
