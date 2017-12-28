@@ -10,6 +10,7 @@ import time
 import subprocess
 import json
 import glob
+import traceback
 
 PLAYLIST_DIR = os.path.expanduser('~/playlists')
 
@@ -33,7 +34,7 @@ class PlayerWindow(tk.Toplevel):
         self.attributes("-fullscreen", True)
         self.after_idle(lambda: (self.lift(), self.attributes("-topmost", True)))
         dbus_filename = '/tmp/omxplayerdbus.' + getuser()
-        self.omx = subprocess.Popen(['/usr/bin/omxplayer', '-g', '--aspect-mode', 'letterbox', url])
+        self.omx = subprocess.Popen(['/usr/bin/omxplayer', '-g', '--aspect-mode', 'letterbox', '--avdict', 'reconnect:1,reconnect_at_eof:1,reconnect_streamed:1', url])
         retries = 20
         while True:
             try:
@@ -80,8 +81,6 @@ class PlayerWindow(tk.Toplevel):
         frame.bind('<Button-4>', lambda e: self.scroll(-1)) # scroll up
         frame.bind('<Button-5>', lambda e: self.scroll(1)) # scroll down
         self.bind('<Key>', self.keypress)
-        self.bind('<Unmap>', lambda e: self.showHideVideo(False) if e.widget == self else None)
-        self.bind('<Map>', lambda e: self.showHideVideo(True) if e.widget == self else None)
 
         self.frame = frame = tk.Frame(self)
         tk.Button(frame, text='Stop', command=self.close).pack(side=tk.LEFT)
@@ -101,19 +100,21 @@ class PlayerWindow(tk.Toplevel):
         try:
             self.duration = long(self.dbusif_props.Duration()) // 1000000
         except dbus.DBusException as e:
-            print(e)
-            tkMessageBox.showerror('Duration', str(e))
+            traceback.print_exc()
             self.close()
+            return
         tk.Label(frame, text=secToStr(self.duration)).pack(side=tk.LEFT)
         self.scale.config(to_=self.duration)
+
+        self.bind('<Unmap>', lambda e: self.showHideVideo(False) if e.widget == self else None)
+        self.bind('<Map>', lambda e: self.showHideVideo(True) if e.widget == self else None)
 
     def scaleChangedUsingMouse(self):
         print(long(self.scale.get()) * 1000000)
         try:
             self.dbusif_player.SetPosition(dbus.ObjectPath('/not/used'), long(self.scale.get()) * 1000000)
         except dbus.DBusException as e:
-            print(e)
-            tkMessageBox.showerror('SetPosition', str(e))
+            traceback.print_exc()
             self.close()
         self.maybeStartTimer()
     def left_down(self, event):
@@ -140,15 +141,14 @@ class PlayerWindow(tk.Toplevel):
         try:
             self.dbusif_player.Seek(long(amount) * 5 * 1000000) # Seek relative in us
         except dbus.DBusException as e:
-            print(e)
-            tkMessageBox.showerror('Seek', str(e))
+            traceback.print_exc()
             self.close()
     def close(self):
         if hasattr(self, 'dbusif_player'):
             try:
                 self.dbusif_player.Action(15) # Exit
             except dbus.DBusException as e:
-                print(e)
+                traceback.print_exc()
         time.sleep(0.5)
         try:
             self.omx.terminate()
@@ -163,16 +163,16 @@ class PlayerWindow(tk.Toplevel):
         if self.paused:
             self.pauseTime = time.time()
         else:
-            if time.time() - self.pauseTime > 20:   # in seconds
-                try:
-                    self.dbusif_player.Seek(long(-1)) # Seek relative in us
-                except dbus.DBusException as e:
-                    print(e)
+            pass
+#            if time.time() - self.pauseTime > 20:   # in seconds
+#                try:
+#                    self.dbusif_player.Seek(long(-1)) # Seek relative in us
+#                except dbus.DBusException as e:
+#                    traceback.print_exc()
         try:
             self.dbusif_player.Action(16) # PlayPause
         except dbus.DBusException as e:
-            print(e)
-            tkMessageBox.showerror('PlayPause', str(e))
+            traceback.print_exc()
             self.close()
     def showHideControls(self):
         if self.omx.poll() is not None:
@@ -190,8 +190,7 @@ class PlayerWindow(tk.Toplevel):
         try:
             self.dbusif_player.VideoPos(dbus.ObjectPath('/not/used'), geom)
         except dbus.DBusException as e:
-            print(e)
-            tkMessageBox.showerror('VideoPos', str(e))
+            traceback.print_exc()
             self.close()
     def stopTimer(self):
         if self.timer is not None:
@@ -207,8 +206,7 @@ class PlayerWindow(tk.Toplevel):
         try:
             self.scale.set(self.dbusif_props.Position() // 1000000)
         except dbus.DBusException as e:
-            print(e)
-            tkMessageBox.showerror('Position', str(e))
+            traceback.print_exc()
             self.close()
         self.timer = self.after(1000, self.timerTimeout)
     def showHideVideo(self, show):
@@ -218,7 +216,7 @@ class PlayerWindow(tk.Toplevel):
             else:
                 self.dbusif_player.Action(28) # Hide Video
         except dbus.DBusException as e:
-            print(e)
+            traceback.print_exc()
             self.close()
     def keypress(self, event):
         if event.char == ' ':
