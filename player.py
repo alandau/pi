@@ -371,7 +371,7 @@ class MainWindow(tk.Tk):
         self.load_playlists()
     def load_playlists(self):
         self.playlists.delete(0, tk.END)
-        for l in glob.glob(os.path.join(PLAYLIST_DIR, '*.m3u')):
+        for l in sorted(glob.glob(os.path.join(PLAYLIST_DIR, '*.m3u')), key=lambda s: s.lower()):
             name = os.path.basename(l)[:-4]
             self.playlists.insert(tk.END, name)
     def load_playlist(self):
