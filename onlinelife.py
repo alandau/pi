@@ -36,13 +36,13 @@ class OnlineLifeIE(InfoExtractor):
     @staticmethod
     def _extract_urls(webpage):
         return [iframes.group('url') for iframes in re.finditer(
-            r'<iframe[^>]+?src=(["\'])(?P<url>(?:https?:)?//dterod\.com/player.php\?newsid=[\d]+.*?)\1',
+            r'<iframe[^>]+?src=(["\'])(?P<url>(?:https?:)?//cidwo\.com/player.php\?newsid=[\d]+.*?)\1',
             webpage)]
 
     def _real_extract(self, url):
         video_id = self._match_id(url)
-        html_url = 'http://dterod.com/player.php?newsid=%s' % video_id
-        dterod_data = self._download_webpage('http://dterod.com/js.php?id=%s' % video_id, video_id=video_id,
+        html_url = 'http://cidwo.com/player.php?newsid=%s' % video_id
+        dterod_data = self._download_webpage('http://cidwo.com/js.php?id=%s' % video_id, video_id=video_id,
                 headers={'Referer': html_url}, encoding='cp1251')
         js = self._search_regex(r'[^}]*({[^}]*?})', dterod_data, video_id)
         match = re.search(r'["\']?pl["\']?\s*:\s*"(?P<playlist>[^"]*?)"', js)
