@@ -8,12 +8,17 @@
 <input name="url" size="100" value="{{url}}"><br>
 <input type="submit" name="open" value="Open Player">
 <input type="submit" name="browser" value="Open in Browser">
+<input type="submit" name="yt" value="Get direct URL">
 </form>
-{% if done %}
-<h2 id="done_label">Action completed</h2>
+{% if not done is none %}
+<h2 id="done_label">{% if done %}Action completed{% else %}Error{% endif %}</h2>
 <script>
 setTimeout('document.getElementById("done_label").style.color="lightgray"', 2000);
 </script>
+{% endif %}
+{% if direct_url %}
+<a href="{{direct_url}}">Direct URL</a>
+<p>
 {% endif %}
 <p>
 Bookmark this: <a href="javascript:(function(){location.href='{{base}}?url='+encodeURIComponent(location.href);})()">Play on TV</a>
