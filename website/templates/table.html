@@ -1,0 +1,21 @@
+<table border="1">
+<tr>
+{% for col in columns %}
+	<th>{{ col }}</th>
+{% endfor %}
+</tr>
+
+{% for row in rows %}
+<tr>
+	{% for cell in row %}
+	<td>
+		{% if cell[1] %}
+		<a href="{{ cell[1] }}">{{ cell[0] }}</a>
+		{% else %}
+		{{ cell[0] }}
+		{% endif %}
+	</td>
+	{% endfor %}
+</tr>
+{% endfor %}
+</table>
