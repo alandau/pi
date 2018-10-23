@@ -3,14 +3,21 @@ from __future__ import unicode_literals
 
 import re
 import itertools
+import binascii
+import base64
+import json
+from Crypto.Cipher import AES
 
 from .common import InfoExtractor
 from ..compat import (
     compat_str,
+    compat_urllib_parse_urlencode,
 )
 from ..utils import (
     determine_ext,
     unified_strdate,
+    int_or_none,
+    RegexNotFoundError,
 )
 
 
@@ -19,27 +26,59 @@ class OnlineLifeIE(InfoExtractor):
     IE_DESC = 'Online-Life videos'
     _VALID_URL = r'https?://www\.online-?life\.(?:[\w]+)/(?P<id>[\d]+)-.*\.html'
 
-    _TESTS = [{
-        'url': 'http://www.online-life.in/16879-zlo-vnutri-the-evil-within-2017.html',
-        'info_dict' : {
-            'id': '16879',
-            'title': 'Зло внутри (The Evil Within) 2017',
-            'ext': 'mp4',
-        }
-    }, {
-        'url': 'http://www.online-life.in/16051-pyatero-vernulis-domoy-five-came-back-2017.html',
-        'info_dict': {
-        },
-        'playlist_mincount': 3,
-    }]
-
-    @staticmethod
-    def _extract_urls(webpage):
-        return [iframes.group('url') for iframes in re.finditer(
-            r'<iframe[^>]+?src=(["\'])(?P<url>(?:https?:)?//cidwo\.com/player.php\?newsid=[\d]+.*?)\1',
-            webpage)]
+    UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:62.0) Gecko/20100101 Firefox/62.0'
+    KEY = '1cbc77c38628b1fff69bc12fa05fd13607db7a3c1d0d529a6f2f1a647cd567be'
+    IV = '49a3b536382392dc1e6646084ed33702'
 
     def _real_extract(self, url):
+        headers = {'User-Agent': self.UA, 'Referer': url}
+
+        video_id = self._match_id(url)
+        main_page = self._download_webpage(url, video_id, headers=headers)
+        try:
+            moonwalk_url = self._search_regex(r'<iframe src="([^"]+/iframe)"', main_page, video_id)
+        except RegexNotFoundError as e:
+            return self._real_extract_old_format(url)
+        mastarti_page = self._download_webpage(moonwalk_url, video_id, headers=headers)
+        partner_id = self._search_regex(r'partner_id: ([0-9]+)', mastarti_page, video_id)
+        domain_id = self._search_regex(r'domain_id: ([0-9]+)', mastarti_page, video_id)
+        host = self._search_regex(r'''host: ['"]([^'"]+)['"]''', mastarti_page, video_id)
+        proto = self._search_regex(r'''proto: ['"]([^'"]+)['"]''', mastarti_page, video_id)
+        video_token = self._search_regex(r'''video_token: ['"]([^'"]+)['"]''', mastarti_page, video_id)
+
+        dic = {
+            'a': partner_id,
+            'b': domain_id,
+            'c': False,
+            'e': video_token,
+            'f': self.UA,
+        }
+
+        plaintext = json.dumps(dic)
+        pad_value = 16 - len(plaintext) % 16
+        padding = chr(pad_value) * pad_value
+        ciphertext = AES.new(binascii.unhexlify(self.KEY), AES.MODE_CBC, binascii.unhexlify(self.IV)).encrypt(plaintext + padding)
+        cipher_base64 = base64.b64encode(ciphertext)
+        mp4_or_m3u = self._download_json(proto + host + '/vs', video_id, headers=headers, data=compat_urllib_parse_urlencode({'q': cipher_base64}))
+        quality_json_url = mp4_or_m3u[u'mp4'] if u'mp4' in mp4_or_m3u else mp4_or_m3u[u'm3u8']
+        quality_json = self._download_json(quality_json_url, video_id, headers=headers)
+        formats = []
+        for (q, url) in quality_json.items():
+            formats.append({
+                'url': url,
+                'manifest_url': url,
+                'format_id': q,
+                'height': int_or_none(q),
+            })
+        self._sort_formats(formats)
+
+        return {
+            'id': video_id,
+            'title': 'ttt',
+            'formats': formats,
+        }
+
+    def _real_extract_old_format(self, url):
         video_id = self._match_id(url)
         html_url = 'http://cidwo.com/player.php?newsid=%s' % video_id
         dterod_data = self._download_webpage('http://cidwo.com/js.php?id=%s' % video_id, video_id=video_id,
