@@ -97,12 +97,17 @@ class PlayerWindow(tk.Toplevel):
         self.controlsShown = False
         self.paused = False
 
-        try:
-            self.duration = long(self.dbusif_props.Duration()) // 1000000
-        except dbus.DBusException as e:
-            traceback.print_exc()
-            self.close()
-            return
+        retries = 5
+        while True:
+            try:
+                self.duration = long(self.dbusif_props.Duration()) // 1000000
+                break
+            except dbus.DBusException:
+                time.sleep(0.05)
+                retries -= 1
+                if retries == 0:
+                    self.close()
+                    return
         tk.Label(frame, text=secToStr(self.duration)).pack(side=tk.LEFT)
         self.scale.config(to_=self.duration)
 
