@@ -17,7 +17,7 @@ from ..utils import (
 class OnlineLifeIE(InfoExtractor):
     IE_NAME = 'online-life'
     IE_DESC = 'Online-Life videos'
-    _VALID_URL = r'https?://www\.online-life\.(?:[\w]+)/(?P<id>[\d]+)-.*\.html'
+    _VALID_URL = r'https?://www\.online-?life\.(?:[\w]+)/(?P<id>[\d]+)-.*\.html'
 
     _TESTS = [{
         'url': 'http://www.online-life.in/16879-zlo-vnutri-the-evil-within-2017.html',
