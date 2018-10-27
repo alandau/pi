@@ -27,8 +27,8 @@ class OnlineLifeIE(InfoExtractor):
     _VALID_URL = r'https?://www\.online-?life\.(?:[\w]+)/(?P<id>[\d]+)-.*\.html'
 
     UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:62.0) Gecko/20100101 Firefox/62.0'
-    KEY = '1cbc77c38628b1fff69bc12fa05fd13607db7a3c1d0d529a6f2f1a647cd567be'
-    IV = '49a3b536382392dc1e6646084ed33702'
+    KEY = 'c0236b8bdc4cb8922bcaa51b1281a5abefd1d56efd8bce51225a953589954b5d'
+    IV = 'debea2f78027e090ff750a2e22d2b806'
 
     def _real_extract(self, url):
         headers = {'User-Agent': self.UA, 'Referer': url}
@@ -36,7 +36,7 @@ class OnlineLifeIE(InfoExtractor):
         video_id = self._match_id(url)
         main_page = self._download_webpage(url, video_id, headers=headers)
         try:
-            moonwalk_url = self._search_regex(r'<iframe src="([^"]+/iframe)"', main_page, video_id)
+            moonwalk_url = self._search_regex(r'<iframe .*?src="([^"]+/iframe)"', main_page, video_id)
         except RegexNotFoundError as e:
             return self._real_extract_old_format(url)
         mastarti_page = self._download_webpage(moonwalk_url, video_id, headers=headers)
@@ -60,16 +60,24 @@ class OnlineLifeIE(InfoExtractor):
         ciphertext = AES.new(binascii.unhexlify(self.KEY), AES.MODE_CBC, binascii.unhexlify(self.IV)).encrypt(plaintext + padding)
         cipher_base64 = base64.b64encode(ciphertext)
         mp4_or_m3u = self._download_json(proto + host + '/vs', video_id, headers=headers, data=compat_urllib_parse_urlencode({'q': cipher_base64}))
-        quality_json_url = mp4_or_m3u[u'mp4'] if u'mp4' in mp4_or_m3u else mp4_or_m3u[u'm3u8']
-        quality_json = self._download_json(quality_json_url, video_id, headers=headers)
-        formats = []
-        for (q, url) in quality_json.items():
-            formats.append({
-                'url': url,
-                'manifest_url': url,
-                'format_id': q,
-                'height': int_or_none(q),
-            })
+        if u'mp4' in mp4_or_m3u:
+            quality_json_url = mp4_or_m3u[u'mp4']
+            quality_json = self._download_json(quality_json_url, video_id, headers=headers)
+            formats = []
+            for (q, url) in quality_json.items():
+                formats.append({
+                    'url': url,
+                    'manifest_url': url,
+                    'format_id': q,
+                    'height': int_or_none(q),
+                })
+        elif u'm3u8' in mp4_or_m3u:
+            quality_selector_url = mp4_or_m3u[u'm3u8']
+            quality_selector_m3u = self._download_webpage(quality_selector_url, video_id, headers=headers)
+            formats = self._parse_m3u8_formats(quality_selector_m3u, video_id)
+        else:
+            raise Exception("Can't parse /vs output")
+
         self._sort_formats(formats)
 
         return {
