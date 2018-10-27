@@ -305,7 +305,7 @@ class MainWindow(tk.Tk):
         player = PlayerWindow(self, url)
     def play_youtube(self, url):
         try:
-            url = subprocess.check_output('youtube-dl -f "best[height<=?720][ext=mp4]" -g --no-playlist -- "%s" 2>&1' % url, shell=True).strip()
+            url = subprocess.check_output('youtube-dl -f "best[height<=?720]" -g --no-playlist -- "%s" 2>&1' % url, shell=True).strip()
         except subprocess.CalledProcessError as e:
             tkMessageBox.showerror('Youtube', "Can't get video url: %s" % e.output)
             return
