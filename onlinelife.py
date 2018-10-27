@@ -6,12 +6,14 @@ import itertools
 import binascii
 import base64
 import json
+import urllib
 from Crypto.Cipher import AES
 
 from .common import InfoExtractor
 from ..compat import (
     compat_str,
     compat_urllib_parse_urlencode,
+    compat_parse_qs,
 )
 from ..utils import (
     determine_ext,
@@ -24,7 +26,7 @@ from ..utils import (
 class OnlineLifeIE(InfoExtractor):
     IE_NAME = 'online-life'
     IE_DESC = 'Online-Life videos'
-    _VALID_URL = r'https?://www\.online-?life\.(?:[\w]+)/(?P<id>[\d]+)-.*\.html'
+    _VALID_URL = r'https?://www\.online-?life\.(?:[\w]+)/(?P<id>[\d]+)-.*\.html|^onlinelife://onlinelife\?.*'
 
     UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:62.0) Gecko/20100101 Firefox/62.0'
     KEY = 'c0236b8bdc4cb8922bcaa51b1281a5abefd1d56efd8bce51225a953589954b5d'
@@ -33,13 +35,82 @@ class OnlineLifeIE(InfoExtractor):
     def _real_extract(self, url):
         headers = {'User-Agent': self.UA, 'Referer': url}
 
+        if url.startswith('onlinelife://onlinelife?'):
+            return self.get_one_episode(url, headers)
+
         video_id = self._match_id(url)
         main_page = self._download_webpage(url, video_id, headers=headers)
         try:
             moonwalk_url = self._search_regex(r'<iframe .*?src="([^"]+/iframe)"', main_page, video_id)
         except RegexNotFoundError as e:
             return self._real_extract_old_format(url)
+
+        if self._downloader.params.get('noplaylist'):
+            # Get just video if both playlist and video available
+            return self.handle_one_video(moonwalk_url, video_id, headers)
+
         mastarti_page = self._download_webpage(moonwalk_url, video_id, headers=headers)
+        seasons = self._search_regex(r'seasons: \[([\d,\s]+)\]', mastarti_page, video_id, fatal=False)
+        if not seasons:
+            # No playlist available, get just video
+            return self.handle_one_video(moonwalk_url, video_id, headers)
+
+        # Get playlist
+        entries = []
+        ref = self._search_regex(r'''ref: ['"]([^'"]+)['"]''', mastarti_page, video_id)
+        serial_id = self._search_regex(r'''serial_token: ['"]([^'"]+)['"]''', mastarti_page, video_id)
+        translations = self._search_regex(r'translations: \[(\[.*\])\]', mastarti_page, video_id, fatal=False)
+        if translations:
+            t = re.findall(r'"([^"]*)"', translations)
+            # (serial_id, translation_name)
+            translations = zip(t[::2], t[1::2])
+            if not translations:
+                translations = [(serial_id, "Unknown")]
+        else:
+            translations = [(serial_id, "Unknown")]
+
+        for (serial_id, trans_name) in translations:
+            translations_url = 'http://mastarti.com/serial/{serial}/iframe?season=1&episode=1&ref={ref}'.format(serial=serial_id, ref=ref)
+            translations_page = self._download_webpage(translations_url, video_id, headers=headers)
+            seasons = self._search_regex(r'seasons: \[([\d,\s]+)\]', translations_page, video_id, fatal=False)
+            if not seasons:
+                continue
+            seasons = [s.strip() for s in seasons.split(',')]
+            for season in seasons:
+                season_url = 'http://mastarti.com/serial/{serial}/iframe?season={season}&episode=1&ref={ref}'.format(serial=serial_id, season=season, ref=ref)
+                season_page = self._download_webpage(season_url, video_id, headers=headers)
+                episodes = self._search_regex(r'episodes: \[([\d,\s]*)\]', season_page, video_id)
+                episodes = [e.strip() for e in episodes.split(',')]
+                for episode in episodes:
+                    title = 'Translation {} Season {} Episode {}'.format(trans_name, season, episode)
+                    videourl = 'onlinelife://onlinelife?origurl={origurl}&serial={serial}&season={season}&episode={episode}'.format(origurl=urllib.quote(url), serial=serial_id, season=season, episode=episode)
+                    entries.append(dict(id=videourl, title=title, url=videourl))
+
+        return self.playlist_result(entries)
+
+    def get_one_episode(self, url, headers):
+        qs = url[url.index('?')+1:]
+        params = compat_parse_qs(qs)
+        origurl = params['origurl'][0]
+        serial_id = params['serial'][0]
+        season = params['season'][0]
+        episode = params['episode'][0]
+
+        video_id = url
+        main_page = self._download_webpage(origurl, video_id, headers=headers)
+        moonwalk_url = self._search_regex(r'<iframe .*?src="([^"]+/iframe)"', main_page, video_id)
+        mastarti_page = self._download_webpage(moonwalk_url, video_id, headers=headers)
+        ref = self._search_regex(r'''ref: ['"]([^'"]+)['"]''', mastarti_page, video_id)
+        episode_url = 'http://mastarti.com/serial/{serial}/iframe?season={season}&episode={episode}&ref={ref}'.format(serial=serial_id, season=season, episode=episode, ref=ref)
+        return self.handle_one_video(episode_url, video_id, headers)
+
+    def handle_one_video(self, url, video_id, headers):
+        """
+        url looks like:
+        http://moonwalk.cc/serial/0c0ebb8924c4183e5d387de8f0ba8b17/iframe
+        http://mastarti.com/serial/d08f6dc93c19f80c0b22b18048c15cab/iframe?season=16&episode=4&ref=...
+        """
+        mastarti_page = self._download_webpage(url, video_id, headers=headers)
         partner_id = self._search_regex(r'partner_id: ([0-9]+)', mastarti_page, video_id)
         domain_id = self._search_regex(r'domain_id: ([0-9]+)', mastarti_page, video_id)
         host = self._search_regex(r'''host: ['"]([^'"]+)['"]''', mastarti_page, video_id)
