@@ -29,8 +29,6 @@ class OnlineLifeIE(InfoExtractor):
     _VALID_URL = r'https?://www\.online-?life\.(?:[\w]+)/(?P<id>[\d]+)-.*\.html|^onlinelife://onlinelife\?.*'
 
     UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:62.0) Gecko/20100101 Firefox/62.0'
-    KEY = 'c0236b8bdc4cb8922bcaa51b1281a5abefd1d56efd8bce51225a953589954b5d'
-    IV = 'debea2f78027e090ff750a2e22d2b806'
 
     def _real_extract(self, url):
         headers = {'User-Agent': self.UA, 'Referer': url}
@@ -117,6 +115,8 @@ class OnlineLifeIE(InfoExtractor):
         proto = self._search_regex(r'''proto: ['"]([^'"]+)['"]''', mastarti_page, video_id)
         video_token = self._search_regex(r'''video_token: ['"]([^'"]+)['"]''', mastarti_page, video_id)
 
+        (key, iv) = self.get_key_and_iv(mastarti_page, video_id, headers)
+
         dic = {
             'a': partner_id,
             'b': domain_id,
@@ -128,7 +128,7 @@ class OnlineLifeIE(InfoExtractor):
         plaintext = json.dumps(dic)
         pad_value = 16 - len(plaintext) % 16
         padding = chr(pad_value) * pad_value
-        ciphertext = AES.new(binascii.unhexlify(self.KEY), AES.MODE_CBC, binascii.unhexlify(self.IV)).encrypt(plaintext + padding)
+        ciphertext = AES.new(binascii.unhexlify(key), AES.MODE_CBC, binascii.unhexlify(iv)).encrypt(plaintext + padding)
         cipher_base64 = base64.b64encode(ciphertext)
         mp4_or_m3u = self._download_json(proto + host + '/vs', video_id, headers=headers, data=compat_urllib_parse_urlencode({'q': cipher_base64}))
         if u'mp4' in mp4_or_m3u:
@@ -156,6 +156,66 @@ class OnlineLifeIE(InfoExtractor):
             'title': 'ttt',
             'formats': formats,
         }
+
+    def get_key_and_iv(self, mastarti_page, video_id, headers):
+        js_url = self._search_regex(r'<script src="(/assets/video-[^.]*\.js)">', mastarti_page, video_id)
+        js_url = "http://mastarti.com" + js_url
+        js = self._download_webpage(js_url, video_id, headers=headers)
+        js = js[js.index('getVideoManifests:') : js.index('onGetManifestSuccess:')]
+        js = js.replace('\n', '')
+        r_str = self._search_regex(r'r=\[([^]]*)\]', js, video_id)
+        rotate_amt = int(self._search_regex(r'\(r,(\d+)\)', js, video_id))
+        e_str = self._search_regex(r';(e[[.][^;]*);', js, video_id)
+        s = self._search_regex(r's=([^,]*),', js, video_id) # key
+        a = self._search_regex(r'a=([^,]*),', js, video_id) # iv
+
+        r = [elem[1:-1] for elem in r_str.split(',')]
+        rotate_amt = rotate_amt % len(r)
+        for i in range(rotate_amt):
+            r = r[1:] + r[0:1]
+
+        e = {}
+        def evaluate(s):
+            terms = s.split('+')
+            if len(terms) > 1:
+                return ''.join(evaluate(t) for t in terms)
+            # No + in expression
+            if s.startswith('e.'):
+                return e[s[2:]]
+            if s.startswith('e['):
+                if not s.endswith(']'):
+                    raise Exception("Can't evaluate {}".format(s))
+                return e[evaluate(s[2:-1])]
+            if s.startswith('"'):
+                if not s.endswith('"'):
+                    raise Exception("Can't evaluate {}".format(s))
+                return s[1:-1]
+            m = re.match(r'o\("((?:0x)?[0-9a-fA-F]+)"\)$', s)
+            if m:
+                return r[int(m.group(1), base=0)]
+            raise Exception("Can't evaluate {}, unknown format".format(s))
+
+        for elem in e_str.split(','):
+            # elem look like e[x]=z or e.y=z
+            # x is a string or o("0x1d")
+            # y is a js identifier
+            # z is o("0x11") or "80" or e[one_of_the_above] or sum_of_above
+            (left, right) = elem.split('=')
+            if left[0] != 'e':
+                raise Exception('Bad format of e assignment')
+            if left[1] == '.':
+                attr = left[2:]
+            elif left[1] == '[':
+                if left[-1] != ']':
+                    raise Exception('Bad format of e[ assigment')
+                attr = left[2:-1]
+                attr = evaluate(attr)
+            else:
+                raise Exception('Bad char after e in assigment')
+            val = evaluate(right)
+            e[attr] = val
+
+        return (evaluate(s), evaluate(a))
 
     def _real_extract_old_format(self, url):
         video_id = self._match_id(url)
