@@ -55,6 +55,9 @@ class OnlineLifeIE(InfoExtractor):
 
         # Get playlist
         entries = []
+        host = self._search_regex(r'''host: ['"]([^'"]+)['"]''', mastarti_page, video_id)
+        proto = self._search_regex(r'''proto: ['"]([^'"]+)['"]''', mastarti_page, video_id)
+        url_prefix = proto + host
         ref = self._search_regex(r'''ref: ['"]([^'"]+)['"]''', mastarti_page, video_id)
         serial_id = self._search_regex(r'''serial_token: ['"]([^'"]+)['"]''', mastarti_page, video_id)
         translations = self._search_regex(r'translations: \[(\[.*\])\]', mastarti_page, video_id, fatal=False)
@@ -68,14 +71,14 @@ class OnlineLifeIE(InfoExtractor):
             translations = [(serial_id, "Unknown")]
 
         for (serial_id, trans_name) in translations:
-            translations_url = 'http://mastarti.com/serial/{serial}/iframe?season=1&episode=1&ref={ref}'.format(serial=serial_id, ref=ref)
+            translations_url = url_prefix + '/serial/{serial}/iframe?season=1&episode=1&ref={ref}'.format(serial=serial_id, ref=ref)
             translations_page = self._download_webpage(translations_url, video_id, headers=headers)
             seasons = self._search_regex(r'seasons: \[([\d,\s]+)\]', translations_page, video_id, fatal=False)
             if not seasons:
                 continue
             seasons = [s.strip() for s in seasons.split(',')]
             for season in seasons:
-                season_url = 'http://mastarti.com/serial/{serial}/iframe?season={season}&episode=1&ref={ref}'.format(serial=serial_id, season=season, ref=ref)
+                season_url = url_prefix + '/serial/{serial}/iframe?season={season}&episode=1&ref={ref}'.format(serial=serial_id, season=season, ref=ref)
                 season_page = self._download_webpage(season_url, video_id, headers=headers)
                 episodes = self._search_regex(r'episodes: \[([\d,\s]*)\]', season_page, video_id)
                 episodes = [e.strip() for e in episodes.split(',')]
@@ -99,7 +102,10 @@ class OnlineLifeIE(InfoExtractor):
         moonwalk_url = self._search_regex(r'<iframe .*?src="([^"]+/iframe)"', main_page, video_id)
         mastarti_page = self._download_webpage(moonwalk_url, video_id, headers=headers)
         ref = self._search_regex(r'''ref: ['"]([^'"]+)['"]''', mastarti_page, video_id)
-        episode_url = 'http://mastarti.com/serial/{serial}/iframe?season={season}&episode={episode}&ref={ref}'.format(serial=serial_id, season=season, episode=episode, ref=ref)
+        host = self._search_regex(r'''host: ['"]([^'"]+)['"]''', mastarti_page, video_id)
+        proto = self._search_regex(r'''proto: ['"]([^'"]+)['"]''', mastarti_page, video_id)
+        url_prefix = proto + host
+        episode_url = url_prefix + '/serial/{serial}/iframe?season={season}&episode={episode}&ref={ref}'.format(serial=serial_id, season=season, episode=episode, ref=ref)
         return self.handle_one_video(episode_url, video_id, headers)
 
     def handle_one_video(self, url, video_id, headers):
@@ -115,7 +121,9 @@ class OnlineLifeIE(InfoExtractor):
         proto = self._search_regex(r'''proto: ['"]([^'"]+)['"]''', mastarti_page, video_id)
         video_token = self._search_regex(r'''video_token: ['"]([^'"]+)['"]''', mastarti_page, video_id)
 
-        (key, iv) = self.get_key_and_iv(mastarti_page, video_id, headers)
+        url_prefix = proto + host
+
+        (key, iv) = self.get_key_and_iv(mastarti_page, url_prefix, video_id, headers)
 
         dic = {
             'a': partner_id,
@@ -130,7 +138,7 @@ class OnlineLifeIE(InfoExtractor):
         padding = chr(pad_value) * pad_value
         ciphertext = AES.new(binascii.unhexlify(key), AES.MODE_CBC, binascii.unhexlify(iv)).encrypt(plaintext + padding)
         cipher_base64 = base64.b64encode(ciphertext)
-        mp4_or_m3u = self._download_json(proto + host + '/vs', video_id, headers=headers, data=compat_urllib_parse_urlencode({'q': cipher_base64}))
+        mp4_or_m3u = self._download_json(url_prefix + '/vs', video_id, headers=headers, data=compat_urllib_parse_urlencode({'q': cipher_base64}))
         if u'mp4' in mp4_or_m3u:
             quality_json_url = mp4_or_m3u[u'mp4']
             quality_json = self._download_json(quality_json_url, video_id, headers=headers)
@@ -153,13 +161,12 @@ class OnlineLifeIE(InfoExtractor):
 
         return {
             'id': video_id,
-            'title': 'ttt',
             'formats': formats,
         }
 
-    def get_key_and_iv(self, mastarti_page, video_id, headers):
+    def get_key_and_iv(self, mastarti_page, url_prefix, video_id, headers):
         js_url = self._search_regex(r'<script src="(/assets/video-[^.]*\.js)">', mastarti_page, video_id)
-        js_url = "http://mastarti.com" + js_url
+        js_url = url_prefix + js_url
         js = self._download_webpage(js_url, video_id, headers=headers)
         js = js[js.index('getVideoManifests:') : js.index('onGetManifestSuccess:')]
         js = js.replace('\n', '')
