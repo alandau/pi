@@ -161,6 +161,7 @@ class OnlineLifeIE(InfoExtractor):
 
         return {
             'id': video_id,
+            'title': video_id,
             'formats': formats,
         }
 
