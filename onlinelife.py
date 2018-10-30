@@ -115,6 +115,7 @@ class OnlineLifeIE(InfoExtractor):
         http://mastarti.com/serial/d08f6dc93c19f80c0b22b18048c15cab/iframe?season=16&episode=4&ref=...
         """
         mastarti_page = self._download_webpage(url, video_id, headers=headers)
+        ref = self._search_regex(r'''ref: ['"]([^'"]+)['"]''', mastarti_page, video_id)
         partner_id = self._search_regex(r'partner_id: ([0-9]+)', mastarti_page, video_id)
         domain_id = self._search_regex(r'domain_id: ([0-9]+)', mastarti_page, video_id)
         host = self._search_regex(r'''host: ['"]([^'"]+)['"]''', mastarti_page, video_id)
@@ -138,7 +139,7 @@ class OnlineLifeIE(InfoExtractor):
         padding = chr(pad_value) * pad_value
         ciphertext = AES.new(binascii.unhexlify(key), AES.MODE_CBC, binascii.unhexlify(iv)).encrypt(plaintext + padding)
         cipher_base64 = base64.b64encode(ciphertext)
-        mp4_or_m3u = self._download_json(url_prefix + '/vs', video_id, headers=headers, data=compat_urllib_parse_urlencode({'q': cipher_base64}))
+        mp4_or_m3u = self._download_json(url_prefix + '/vs', video_id, headers=headers, data=compat_urllib_parse_urlencode({'q': cipher_base64, 'ref': ref}))
         if u'mp4' in mp4_or_m3u:
             quality_json_url = mp4_or_m3u[u'mp4']
             quality_json = self._download_json(quality_json_url, video_id, headers=headers)
@@ -174,8 +175,8 @@ class OnlineLifeIE(InfoExtractor):
         r_str = self._search_regex(r'r=\[([^]]*)\]', js, video_id)
         rotate_amt = int(self._search_regex(r'\(r,(\d+)\)', js, video_id))
         e_str = self._search_regex(r';(e[[.][^;]*);', js, video_id)
-        s = self._search_regex(r's=([^,]*),', js, video_id) # key
-        a = self._search_regex(r'a=([^,]*),', js, video_id) # iv
+        s = self._search_regex(r'\bs=([^,;]*)[,;]', js, video_id) # key
+        a = self._search_regex(r'\ba=([^,;]*)[,;]', js, video_id) # iv
 
         r = [elem[1:-1] for elem in r_str.split(',')]
         rotate_amt = rotate_amt % len(r)
