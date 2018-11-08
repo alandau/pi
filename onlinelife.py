@@ -172,13 +172,14 @@ class OnlineLifeIE(InfoExtractor):
         js = self._download_webpage(js_url, video_id, headers=headers)
         js = js[js.index('getVideoManifests:') : js.index('onGetManifestSuccess:')]
         js = js.replace('\n', '')
-        r_str = self._search_regex(r'r=\[([^]]*)\]', js, video_id)
-        rotate_amt = int(self._search_regex(r'\(r,(\d+)\)', js, video_id))
+        r_str = self._search_regex(r'o=\[(.*?)\];', js, video_id)
+        rotate_amt = int(self._search_regex(r'\(o,(\d+)\)', js, video_id))
         e_str = self._search_regex(r';(e[[.][^;]*);', js, video_id)
-        s = self._search_regex(r'\bs=([^,;]*)[,;]', js, video_id) # key
-        a = self._search_regex(r'\ba=([^,;]*)[,;]', js, video_id) # iv
+        s = self._search_regex(r'\bl=([^,;]*)[,;]', js, video_id) # key
+        a = self._search_regex(r'\bc=([^,;]*)[,;]', js, video_id) # iv
 
-        r = [elem[1:-1] for elem in r_str.split(',')]
+        r = r_str[1:-2]
+        r = [elem for elem in r_str.split('","')]
         rotate_amt = rotate_amt % len(r)
         for i in range(rotate_amt):
             r = r[1:] + r[0:1]
@@ -199,7 +200,7 @@ class OnlineLifeIE(InfoExtractor):
                 if not s.endswith('"'):
                     raise Exception("Can't evaluate {}".format(s))
                 return s[1:-1]
-            m = re.match(r'o\("((?:0x)?[0-9a-fA-F]+)"\)$', s)
+            m = re.match(r's\("((?:0x)?[0-9a-fA-F]+)"\)$', s)
             if m:
                 return r[int(m.group(1), base=0)]
             raise Exception("Can't evaluate {}, unknown format".format(s))
@@ -209,6 +210,8 @@ class OnlineLifeIE(InfoExtractor):
             # x is a string or o("0x1d")
             # y is a js identifier
             # z is o("0x11") or "80" or e[one_of_the_above] or sum_of_above
+            if '=' not in elem:
+                continue
             (left, right) = elem.split('=')
             if left[0] != 'e':
                 raise Exception('Bad format of e assignment')
