@@ -8,6 +8,7 @@ import base64
 import json
 import urllib
 from Crypto.Cipher import AES
+import time
 
 from .common import InfoExtractor
 from ..compat import (
@@ -178,7 +179,7 @@ class OnlineLifeIE(InfoExtractor):
         s = self._search_regex(r'\bl=([^,;]*)[,;]', js, video_id) # key
         a = self._search_regex(r'\bc=([^,;]*)[,;]', js, video_id) # iv
 
-        r = r_str[1:-2]
+        r_str = r_str[1:-1]
         r = [elem for elem in r_str.split('","')]
         rotate_amt = rotate_amt % len(r)
         for i in range(rotate_amt):
