@@ -173,11 +173,28 @@ class OnlineLifeIE(InfoExtractor):
         js = self._download_webpage(js_url, video_id, headers=headers)
         js = js[js.index('getVideoManifests:') : js.index('onGetManifestSuccess:')]
         js = js.replace('\n', '')
-        r_str = self._search_regex(r'o=\[(.*?)\];', js, video_id)
-        rotate_amt = int(self._search_regex(r'\(o,(\d+)\)', js, video_id))
-        e_str = self._search_regex(r';(e[[.][^;]*);', js, video_id)
-        s = self._search_regex(r'\bl=([^,;]*)[,;]', js, video_id) # key
-        a = self._search_regex(r'\bc=([^,;]*)[,;]', js, video_id) # iv
+        m = re.search(r'\(([a-z]),(\d+)\)', js)
+        if not m:
+            raise Exception("Can't get rotate amount")
+        r_var = m.group(1)
+        rotate_amt = int(m.group(2))
+
+        m = re.search(r'([a-z])\[([a-z])\("0x[0-9a-f]{1,2}"\)\]', js)
+        if not m:
+            raise Exception("Can't get e array and o function var names")
+        e_name = m.group(1)
+        o_name = m.group(2)
+
+        r_str = self._search_regex(r_var + r'=\[(.*?)\];', js, video_id)
+        e_str = self._search_regex(r';(' + e_name + r'[[.][^;]*);', js, video_id)
+
+        m = re.search(r'\(([a-z])\).{,10}iv:.*?\(([a-z])\)', js)
+        if not m:
+            raise Exception("Can't get key and iv vars")
+        key_var = m.group(1)
+        iv_var = m.group(2)
+        s = self._search_regex(r'\b' + key_var + r'=([^,;]*)[,;]', js, video_id) # key
+        a = self._search_regex(r'\b' + iv_var + r'=([^,;]*)[,;]', js, video_id) # iv
 
         r_str = r_str[1:-1]
         r = [elem for elem in r_str.split('","')]
@@ -191,9 +208,9 @@ class OnlineLifeIE(InfoExtractor):
             if len(terms) > 1:
                 return ''.join(evaluate(t) for t in terms)
             # No + in expression
-            if s.startswith('e.'):
+            if s.startswith(e_name + '.'):
                 return e[s[2:]]
-            if s.startswith('e['):
+            if s.startswith(e_name + '['):
                 if not s.endswith(']'):
                     raise Exception("Can't evaluate {}".format(s))
                 return e[evaluate(s[2:-1])]
@@ -204,7 +221,7 @@ class OnlineLifeIE(InfoExtractor):
             m = re.match(r'(\d+)', s)
             if m:
                 return m.group(1)
-            m = re.match(r's\("((?:0x)?[0-9a-fA-F]+)"\)$', s)
+            m = re.match(o_name + r'\("((?:0x)?[0-9a-fA-F]+)"\)$', s)
             if m:
                 return r[int(m.group(1), base=0)]
             raise Exception("Can't evaluate {}, unknown format".format(s))
@@ -217,7 +234,7 @@ class OnlineLifeIE(InfoExtractor):
             if '=' not in elem:
                 continue
             (left, right) = elem.split('=')
-            if left[0] != 'e':
+            if left[0] != e_name:
                 raise Exception('Bad format of e assignment')
             if left[1] == '.':
                 attr = left[2:]
