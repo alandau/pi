@@ -201,6 +201,9 @@ class OnlineLifeIE(InfoExtractor):
                 if not s.endswith('"'):
                     raise Exception("Can't evaluate {}".format(s))
                 return s[1:-1]
+            m = re.match(r'(\d+)', s)
+            if m:
+                return m.group(1)
             m = re.match(r's\("((?:0x)?[0-9a-fA-F]+)"\)$', s)
             if m:
                 return r[int(m.group(1), base=0)]
