@@ -179,7 +179,7 @@ class OnlineLifeIE(InfoExtractor):
         r_var = m.group(1)
         rotate_amt = int(m.group(2))
 
-        m = re.search(r'([a-z])\[([a-z])\("0x[0-9a-f]{1,2}"\)\]', js)
+        m = re.search(r'([a-z])\[([a-z])\("0x[0-9a-f]{1,2}"\)\]=', js)
         if not m:
             raise Exception("Can't get e array and o function var names")
         e_name = m.group(1)
