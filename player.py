@@ -28,8 +28,10 @@ def sanitifyFilename(name):
     return name.replace('/', '-').replace('\n',' ')
 
 class PlayerWindow(tk.Toplevel):
-    def __init__(self, master, url):
+    def __init__(self, master, url, close_callback=None):
         tk.Toplevel.__init__(self, master)
+        self.close_callback = close_callback
+        self.last_played_youtube = False
         self.geometry('500x500')
         self.attributes("-fullscreen", True)
         self.after_idle(lambda: (self.lift(), self.attributes("-topmost", True)))
@@ -83,7 +85,7 @@ class PlayerWindow(tk.Toplevel):
         self.bind('<Key>', self.keypress)
 
         self.frame = frame = tk.Frame(self)
-        tk.Button(frame, text='Stop', command=self.close).pack(side=tk.LEFT)
+        tk.Button(frame, text='Stop', command=lambda: self.close(True)).pack(side=tk.LEFT)
         tk.Button(frame, text='Minimize', command=self.iconify).pack(side=tk.LEFT)
         tk.Button(frame, text='Play/Pause', command=self.playpause).pack(side=tk.LEFT)
         self.posLabel = tk.Label(frame, text='0:00')
@@ -113,6 +115,7 @@ class PlayerWindow(tk.Toplevel):
 
         self.bind('<Unmap>', lambda e: self.showHideVideo(False) if e.widget == self else None)
         self.bind('<Map>', lambda e: self.showHideVideo(True) if e.widget == self else None)
+        self.timerTimeout()
 
     def scaleChangedUsingMouse(self):
         print(long(self.scale.get()) * 1000000)
@@ -121,7 +124,7 @@ class PlayerWindow(tk.Toplevel):
         except dbus.DBusException as e:
             traceback.print_exc()
             self.close()
-        self.maybeStartTimer()
+        self.timerTimeout()
     def left_down(self, event):
         if self.omx.poll() is not None:
             self.close()
@@ -144,11 +147,16 @@ class PlayerWindow(tk.Toplevel):
             return
         self.hasScrolled = True
         try:
-            self.dbusif_player.Seek(long(amount) * 5 * 1000000) # Seek relative in us
+            amount_sec = long(amount) * 5
+            if amount_sec < 0:
+                # If rewinding, rewind an extra 3 seconds to account for
+                # the player looking for the _next_ I-frame
+                amount_sec -= 3
+            self.dbusif_player.Seek(amount_sec * 1000000) # Seek relative in us
         except dbus.DBusException as e:
             traceback.print_exc()
             self.close()
-    def close(self):
+    def close(self, manual=False):
         if hasattr(self, 'dbusif_player'):
             try:
                 self.dbusif_player.Action(15) # Exit
@@ -162,6 +170,8 @@ class PlayerWindow(tk.Toplevel):
         subprocess.call('killall omxplayer.bin 2>/dev/null', shell=True)
         self.omx.wait()
         self.destroy()
+        if self.close_callback:
+            self.close_callback(manual)
     def playpause(self):
         print("Play/pause")
         self.paused = not self.paused
@@ -187,11 +197,9 @@ class PlayerWindow(tk.Toplevel):
         if self.controlsShown:
             self.frame.pack(fill=tk.X)
             geom = '0 0 %d %d' % (self.screenWidth, self.screenHeight - 70)
-            self.timerTimeout()
         else:
             self.frame.pack_forget()
             geom = '0 0 0 0'
-            self.stopTimer()
         try:
             self.dbusif_player.VideoPos(dbus.ObjectPath('/not/used'), geom)
         except dbus.DBusException as e:
@@ -201,18 +209,16 @@ class PlayerWindow(tk.Toplevel):
         if self.timer is not None:
             self.after_cancel(self.timer)
             self.timer = None
-    def maybeStartTimer(self):
-        if self.controlsShown:
-            self.timerTimeout()
     def timerTimeout(self):
         if self.omx.poll() is not None:
-            self.stopTimer()
+            self.close()
             return
         try:
             self.scale.set(self.dbusif_props.Position() // 1000000)
         except dbus.DBusException as e:
             traceback.print_exc()
             self.close()
+            return
         self.timer = self.after(1000, self.timerTimeout)
     def showHideVideo(self, show):
         try:
@@ -261,9 +267,9 @@ class MainWindow(tk.Tk):
 
         frame = tk.Frame(self)
         frame.pack()
-        bb=tk.Button(frame, text='Play directly', command=self.cmd_play_directly)
+        bb=tk.Button(frame, text='Play directly', command=lambda: (self.autoplay.set(0), self.cmd_play_directly))
         bb.pack(side=tk.LEFT)
-        tk.Button(frame, text='Play Youtube', command=self.cmd_play_youtube).pack(side=tk.LEFT)
+        tk.Button(frame, text='Play Youtube', command=lambda: (self.autoplay.set(0), self.cmd_play_youtube)).pack(side=tk.LEFT)
         tk.Button(frame, text='Get Youtube playlist', command=self.cmd_get_youtube_playlist).pack(side=tk.LEFT)
         tk.Button(frame, text='Add to playlist', command=self.cmd_add_to_playlist).pack(side=tk.LEFT)
 
@@ -289,6 +295,8 @@ class MainWindow(tk.Tk):
         tk.Button(fr, text="Play Youtube", command=self.cmd_playlist_play_youtube).pack(side=tk.LEFT)
         tk.Button(fr, text='Get Youtube playlist', command=self.cmd_playlist_get_youtube_playlist).pack(side=tk.LEFT)
         tk.Button(fr, text="Save playlist", command=self.cmd_playlist_save).pack(side=tk.LEFT)
+        self.autoplay = tk.IntVar()
+        tk.Checkbutton(fr, text='Autoplay', variable=self.autoplay).pack(side=tk.LEFT)
 
         self.load_playlists()
         self.playlistData = []
@@ -302,7 +310,8 @@ class MainWindow(tk.Tk):
         elif action == 'get-youtube-playlist':
             self.cmd_get_youtube_playlist()
     def play(self, url):
-        player = PlayerWindow(self, url)
+        self.last_played_youtube = False
+        player = PlayerWindow(self, url, self.player_closed)
     def play_youtube(self, url):
         try:
             url = subprocess.check_output('youtube-dl -f "best[height<=?720]" -g --no-playlist -- "%s" 2>&1' % url, shell=True).strip()
@@ -311,6 +320,7 @@ class MainWindow(tk.Tk):
             return
         print("Got direct video url: %s" % url)
         self.play(url)
+        self.last_played_youtube = True
     def cmd_play_directly(self):
         self.play(self.text.get())
     def cmd_play_youtube(self):
@@ -413,6 +423,27 @@ class MainWindow(tk.Tk):
             self.playlistData.append(dict(url=url, title=title))
             self.playlist.insert(tk.END, title)
             title = None
+
+    def player_closed(self, manual):
+        if manual or not self.autoplay.get():
+            self.autoplay.set(0)
+            return
+        # Advance to next playlist item
+        sel = self.playlist.curselection()
+        if not sel:
+            return
+        sel = sel[0] + 1
+        if sel >= self.playlist.size():
+            self.autoplay.set(0)
+            return
+        self.playlist.see(sel)
+        self.playlist.activate(sel)
+        self.playlist.selection_clear(0, tk.END)
+        self.playlist.selection_set(sel)
+        if self.last_played_youtube:
+            self.cmd_playlist_play_youtube()
+        else:
+            self.cmd_playlist_play_directly()
 
 
 def main():
