@@ -10,7 +10,7 @@ app = Flask(__name__)
 
 def get_yt_url(url):
     try:
-        return subprocess.check_output('youtube-dl -f "best[height<=?720][ext=mp4]" -g --no-playlist -- "%s" 2>&1' % url, shell=True).strip()
+        return subprocess.check_output('youtube-dl -f "best[height<=?720]" -g --no-playlist -- "%s" 2>&1' % url, shell=True).strip()
     except subprocess.CalledProcessError as e:
         return None
 

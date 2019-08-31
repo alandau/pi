@@ -27,7 +27,10 @@ from ..utils import (
 class OnlineLifeIE(InfoExtractor):
     IE_NAME = 'online-life'
     IE_DESC = 'Online-Life videos'
-    _VALID_URL = r'https?://www\.online-?life\.(?:[\w]+)/(?P<id>[\d]+)-.*\.html|^onlinelife://onlinelife\?.*'
+    #_VALID_URL = r'https?://www\.online-?life\.(?:[\w]+)/(?P<id>[\d]+)-.*\.html|https?://rezka\.ag/.*/(?P<id>[\d]+)-.*\.html|^onlinelife://onlinelife\?.*'
+    #_VALID_URL = r'https?://rezka\.ag/.*/(?P<id>[\d]+)-.*\.html|^onlinelife://onlinelife\?.*'
+    #_VALID_URL = r'(?P<id>https?://www.lostfilmhd.ru/.*)|^onlinelife://onlinelife\?.*'
+    _VALID_URL = r'(?P<id>https?://(?:www.lostfilmhd.ru/.*|onlinefilm-hd.club/.*|www\.online-?life\.(?:[\w]+)/.*))|^onlinelife://onlinelife\?.*'
 
     UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:62.0) Gecko/20100101 Firefox/62.0'
 
@@ -40,7 +43,7 @@ class OnlineLifeIE(InfoExtractor):
         video_id = self._match_id(url)
         main_page = self._download_webpage(url, video_id, headers=headers)
         try:
-            moonwalk_url = self._search_regex(r'<iframe .*?src="([^"]+/iframe)"', main_page, video_id)
+            moonwalk_url = self._search_regex(r'<iframe .*?src="([^"]+/iframe(?:\?[^"]*)?)"', main_page, video_id)
         except RegexNotFoundError as e:
             return self._real_extract_old_format(url)
 
@@ -100,7 +103,7 @@ class OnlineLifeIE(InfoExtractor):
 
         video_id = url
         main_page = self._download_webpage(origurl, video_id, headers=headers)
-        moonwalk_url = self._search_regex(r'<iframe .*?src="([^"]+/iframe)"', main_page, video_id)
+        moonwalk_url = self._search_regex(r'<iframe .*?src="([^"]+/iframe(?:\?[^"]*)?)"', main_page, video_id)
         mastarti_page = self._download_webpage(moonwalk_url, video_id, headers=headers)
         ref = self._search_regex(r'''ref: ['"]([^'"]+)['"]''', mastarti_page, video_id)
         host = self._search_regex(r'''host: ['"]([^'"]+)['"]''', mastarti_page, video_id)
@@ -168,6 +171,18 @@ class OnlineLifeIE(InfoExtractor):
         }
 
     def get_key_and_iv(self, mastarti_page, url_prefix, video_id, headers):
+        (key, iv) = ('', '')
+        keys_page = self._download_webpage('https://raw.githubusercontent.com/WendyH/PHP-Scripts/master/moon4crack.ini', video_id, headers=headers)
+        for line in keys_page.split('\n'):
+            m = re.search(r'"([^"]*)"', line)
+            value = m.group(1) if m else None
+            if line.startswith('key'):
+                key = value
+            elif line.startswith('iv'):
+                iv = value
+
+        return (key, iv)
+
         js_url = self._search_regex(r'<script src="(/assets/video-[^.]*\.js)">', mastarti_page, video_id)
         js_url = url_prefix + js_url
         js = self._download_webpage(js_url, video_id, headers=headers)
