@@ -267,9 +267,9 @@ class MainWindow(tk.Tk):
 
         frame = tk.Frame(self)
         frame.pack()
-        bb=tk.Button(frame, text='Play directly', command=lambda: (self.autoplay.set(0), self.cmd_play_directly))
+        bb=tk.Button(frame, text='Play directly', command=lambda: (self.autoplay.set(0), self.cmd_play_directly()))
         bb.pack(side=tk.LEFT)
-        tk.Button(frame, text='Play Youtube', command=lambda: (self.autoplay.set(0), self.cmd_play_youtube)).pack(side=tk.LEFT)
+        tk.Button(frame, text='Play Youtube', command=lambda: (self.autoplay.set(0), self.cmd_play_youtube())).pack(side=tk.LEFT)
         tk.Button(frame, text='Get Youtube playlist', command=self.cmd_get_youtube_playlist).pack(side=tk.LEFT)
         tk.Button(frame, text='Add to playlist', command=self.cmd_add_to_playlist).pack(side=tk.LEFT)
 
