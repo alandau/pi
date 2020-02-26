@@ -28,8 +28,14 @@ def action():
     url = request.args.get('url', '')
     direct_url = None
     done = True
-    if request.args.get('open', ''):
-        subprocess.Popen("DISPLAY=:0 /home/pi/player/player.py '%s'" % url, shell=True)
+    if request.args.get('open', '') or request.args.get('open_and_play_directly', '') or request.args.get('open_and_play_youtube', ''):
+        if request.args.get('open_and_play_directly', ''):
+            action = ' play-directly'
+        elif request.args.get('open_and_play_youtube', ''):
+            action = ' play-youtube'
+        else:
+            action = ''
+        subprocess.Popen("DISPLAY=:0 /home/pi/player/player.py '%s'%s" % (url, action), shell=True)
     elif request.args.get('browser', ''):
         subprocess.Popen("DISPLAY=:0 xdg-open '%s'" % url, shell=True)
     elif request.args.get('yt', ''):
