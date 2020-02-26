@@ -21,6 +21,7 @@ from ..utils import (
     unified_strdate,
     int_or_none,
     RegexNotFoundError,
+    ExtractorError,
 )
 
 
@@ -30,7 +31,7 @@ class OnlineLifeIE(InfoExtractor):
     #_VALID_URL = r'https?://www\.online-?life\.(?:[\w]+)/(?P<id>[\d]+)-.*\.html|https?://rezka\.ag/.*/(?P<id>[\d]+)-.*\.html|^onlinelife://onlinelife\?.*'
     #_VALID_URL = r'https?://rezka\.ag/.*/(?P<id>[\d]+)-.*\.html|^onlinelife://onlinelife\?.*'
     #_VALID_URL = r'(?P<id>https?://www.lostfilmhd.ru/.*)|^onlinelife://onlinelife\?.*'
-    _VALID_URL = r'(?P<id>https?://(?:www.lostfilmhd.ru/.*|onlinefilm-hd.club/.*|www\.online-?life\.(?:[\w]+)/.*))|^onlinelife://onlinelife\?.*'
+    _VALID_URL = r'(?P<id>https?://(?:www.lostfilmhd.ru/.*|onlinefilm-hd.club/.*|(?:www|[\d]+)\.online-?life(?:tv)?\.(?:[\w]+)/.*))|^onlinelife://onlinelife\?.*'
 
     UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:62.0) Gecko/20100101 Firefox/62.0'
 
@@ -44,6 +45,8 @@ class OnlineLifeIE(InfoExtractor):
         main_page = self._download_webpage(url, video_id, headers=headers)
         try:
             moonwalk_url = self._search_regex(r'<iframe .*?src="([^"]+/iframe(?:\?[^"]*)?)"', main_page, video_id)
+            if 'cidwo.com' in moonwalk_url:
+                return self._real_extract_old_format(url)
         except RegexNotFoundError as e:
             return self._real_extract_old_format(url)
 
@@ -119,6 +122,17 @@ class OnlineLifeIE(InfoExtractor):
         http://mastarti.com/serial/d08f6dc93c19f80c0b22b18048c15cab/iframe?season=16&episode=4&ref=...
         """
         mastarti_page = self._download_webpage(url, video_id, headers=headers)
+
+        m = re.search(r'"hls":"([^"]+)"', mastarti_page)
+        if m:
+            hls_url = m.group(1).replace('\\', '')
+            if hls_url.startswith('//'):
+                hls_url = 'https:' + hls_url
+            return {
+                'id': video_id,
+                'title': video_id,
+                'formats': self._extract_m3u8_formats(hls_url, url),
+            }
         ref = self._search_regex(r'''ref: ['"]([^'"]+)['"]''', mastarti_page, video_id)
         partner_id = self._search_regex(r'partner_id: ([0-9]+)', mastarti_page, video_id)
         domain_id = self._search_regex(r'domain_id: ([0-9]+)', mastarti_page, video_id)
@@ -266,7 +280,10 @@ class OnlineLifeIE(InfoExtractor):
         return (evaluate(s), evaluate(a))
 
     def _real_extract_old_format(self, url):
-        video_id = self._match_id(url)
+        m = re.match(r'.*/(\d+)-', url)
+        if not m:
+            raise ExtractorError("Can't extract id for cidwo.com url")
+        video_id = m.group(1)
         html_url = 'http://cidwo.com/player.php?newsid=%s' % video_id
         dterod_data = self._download_webpage('http://cidwo.com/js.php?id=%s' % video_id, video_id=video_id,
                 headers={'Referer': html_url}, encoding='cp1251')
