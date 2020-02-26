@@ -36,7 +36,7 @@ class PlayerWindow(tk.Toplevel):
         self.attributes("-fullscreen", True)
         self.after_idle(lambda: (self.lift(), self.attributes("-topmost", True)))
         dbus_filename = '/tmp/omxplayerdbus.' + getuser()
-        self.omx = subprocess.Popen(['/usr/bin/omxplayer', '-g', '--aspect-mode', 'letterbox', '--avdict', 'reconnect:1,reconnect_at_eof:1,reconnect_streamed:1', url])
+        self.omx = subprocess.Popen(['/usr/bin/omxplayer', '-g', '--aspect-mode', 'letterbox', '--avdict', 'reconnect:1,reconnect_at_eof:1', url])
         retries = 20
         while True:
             try:
