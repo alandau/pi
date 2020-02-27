@@ -23,8 +23,22 @@ class ZfilmIE(InfoExtractor):
         headers = {'User-Agent': self.UA, 'Referer': url}
         video_id = self._match_id(url)
 
-        main_page = self._download_webpage(url, video_id, headers=headers)
+        main_page = self._download_webpage(url, video_id, headers=headers, expected_status=(200, 301, 302, 404))
+        REDIRECT_REGEX = r'[0-9]{,2};\s*(?:URL|url)=\'?([^\'"]+)'
+        metare = re.compile(
+            r'(?i)<meta\s+(?=(?:[a-z-]+="[^"]+"\s+)*http-equiv="refresh")'
+            r'(?:[a-z-]+="[^"]+"\s+)*?content="%s' % REDIRECT_REGEX)
+        found = metare.search(main_page)
+        old_url = url
+        while found:
+            refresh_url = found.group(1)
+            headers['Referer'] = old_url
+            old_url = refresh_url
+            main_page = self._download_webpage(refresh_url, video_id, headers=headers, expected_status=(200, 301, 302, 404))
+            found = metare.search(main_page)
+
         iframe_url = self._search_regex(r'<iframe .*?src="([^"]+assistir-filme\.biz/video(?:\?[^"]*)?)"', main_page, video_id)
+        headers['Referer'] = iframe_url
         iframe_page = self._download_webpage(iframe_url, video_id, headers=headers)
         final_page_url = self._search_regex(r'<script.*?"src":"(https://[a-z0-9-]*\.assistir-filme\.biz[^"]*)".*?</script', iframe_page, video_id)
         headers['Referer'] = iframe_url
@@ -38,12 +52,14 @@ class ZfilmIE(InfoExtractor):
         file_text = file_text[1:-1] # remove quotes
 
         if not file_text.startswith('['):
-            hls_url = file_text
             # regular url
+            hls_url = file_text
+            formats = self._extract_m3u8_formats(hls_url, url)
+            self._sort_formats(formats)
             return {
                 'id': video_id,
                 'title': video_id,
-                'formats': self._extract_m3u8_formats(hls_url, url),
+                'formats': formats,
             }
 
         # playlist
