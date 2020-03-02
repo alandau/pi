@@ -319,6 +319,7 @@ class MainWindow(tk.Tk):
             tkMessageBox.showerror('Youtube', "Can't get video url: %s" % e.output)
             return
         print("Got direct video url: %s" % url)
+        sys.stdout.flush()
         self.play(url)
         self.last_played_youtube = True
     def cmd_play_directly(self):
