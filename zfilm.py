@@ -6,6 +6,10 @@ import re
 import json
 
 from .common import InfoExtractor
+from ..compat import (
+    compat_parse_qs,
+    compat_urllib_parse_urlencode,
+)
 from ..utils import (
     RegexNotFoundError,
     ExtractorError,
@@ -16,13 +20,32 @@ class ZfilmIE(InfoExtractor):
     IE_DESC = 'Zfilm-Online videos'
     # https://e.zfilm-online.xyz/
     # https://w.online-life-hd.xyz/
-    _VALID_URL = r'(?P<id>https?://[a-z0-9-]*\.(?:zfilm-online|online-life-hd)\.xyz/.*)'
+    _VALID_URL = r'(?P<id>https?://[a-z0-9-]*\.(?:zfilm-online|online-life-hd)\.xyz/.*|(zfilm://.*))'
 
     UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:62.0) Gecko/20100101 Firefox/62.0'
 
     def _real_extract(self, url):
         headers = {'User-Agent': self.UA, 'Referer': url}
         video_id = self._match_id(url)
+
+        if url.startswith('zfilm://'):
+            qs = url[url.index('?')+1:]
+            params = compat_parse_qs(qs)
+            url = params['url'][0]
+            index = int(params['index'][0])
+        else:
+            index = None
+
+        def extract_with_index(result, index=index):
+            if index is None:
+                if 'entries' not in result:
+                    return result
+                for (i, e) in enumerate(result['entries']):
+                    if 'formats' in e:
+                        del e['formats']
+                    e['url'] = 'zfilm://?' + compat_urllib_parse_urlencode({'url': url, 'index': i})
+                return result
+            return result['entries'][index]
 
         main_page = self._download_webpage(url, video_id, headers=headers, expected_status=(200, 301, 302, 404))
         REDIRECT_REGEX = r'[0-9]{,2};\s*(?:URL|url)=\'?([^\'"]+)'
@@ -44,11 +67,11 @@ class ZfilmIE(InfoExtractor):
 
         videocdn = re.search(r'<script.*?"src":"(https://cdn.720-serie.top/[^"]*)".*?</script', iframe_page)
         if videocdn:
-            return self.extract_videocdn(videocdn.group(1), iframe_url, video_id, headers)
+            return extract_with_index(self.extract_videocdn(videocdn.group(1), iframe_url, video_id, headers))
 
         assistir = re.search(r'<script.*?"src":"(https://[a-z0-9-]*\.assistir-filme\.biz[^"]*)".*?</script', iframe_page)
         if assistir:
-            return self.extract_assistir(assistir.group(1), iframe_url, video_id, headers)
+            return extract_with_index(self.extract_assistir(assistir.group(1), iframe_url, video_id, headers))
 
         raise ExtractorError('Not zfilm or assistir-filme')
 
