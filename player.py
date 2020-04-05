@@ -31,7 +31,6 @@ class PlayerWindow(tk.Toplevel):
     def __init__(self, master, url, close_callback=None):
         tk.Toplevel.__init__(self, master)
         self.close_callback = close_callback
-        self.last_played_youtube = False
         self.geometry('500x500')
         self.attributes("-fullscreen", True)
         self.after_idle(lambda: (self.lift(), self.attributes("-topmost", True)))
@@ -267,9 +266,7 @@ class MainWindow(tk.Tk):
 
         frame = tk.Frame(self)
         frame.pack()
-        bb=tk.Button(frame, text='Play directly', command=lambda: (self.autoplay.set(0), self.cmd_play_directly()))
-        bb.pack(side=tk.LEFT)
-        tk.Button(frame, text='Play Youtube', command=lambda: (self.autoplay.set(0), self.cmd_play_youtube())).pack(side=tk.LEFT)
+        bb=tk.Button(frame, text='Play', command=lambda: (self.autoplay.set(0), self.cmd_play())).pack(side=tk.LEFT)
         tk.Button(frame, text='Get Youtube playlist', command=self.cmd_get_youtube_playlist).pack(side=tk.LEFT)
         tk.Button(frame, text='Add to playlist', command=self.cmd_add_to_playlist).pack(side=tk.LEFT)
 
@@ -291,8 +288,7 @@ class MainWindow(tk.Tk):
 
         fr = tk.Frame(frame)
         fr.grid(row=1, column=1)
-        tk.Button(fr, text="Play directly", command=self.cmd_playlist_play_directly).pack(side=tk.LEFT)
-        tk.Button(fr, text="Play Youtube", command=self.cmd_playlist_play_youtube).pack(side=tk.LEFT)
+        tk.Button(fr, text="Play", command=self.cmd_playlist_play).pack(side=tk.LEFT)
         tk.Button(fr, text='Get Youtube playlist', command=self.cmd_playlist_get_youtube_playlist).pack(side=tk.LEFT)
         tk.Button(fr, text="Save playlist", command=self.cmd_playlist_save).pack(side=tk.LEFT)
         self.autoplay = tk.IntVar()
@@ -302,40 +298,27 @@ class MainWindow(tk.Tk):
         self.playlistData = []
         self.playlistTitle = 'playlist'
 
-        if action == 'play-directly':
-            self.after_idle(bb.invoke)
-            #self.cmd_play_directly()
-        elif action == 'play-youtube':
-            self.cmd_play_youtube()
+        if action == 'play':
+            self.after_idle(self.cmd_play)
         elif action == 'get-youtube-playlist':
             self.cmd_get_youtube_playlist()
     def play(self, url):
-        self.last_played_youtube = False
+        if not (url.endswith('.mp4') or url.endswith('.m3u8')):
+            try:
+                url = subprocess.check_output('youtube-dl -f "best[height<=?720]" -g --no-playlist -- "%s" 2>&1' % url, shell=True).strip()
+            except subprocess.CalledProcessError as e:
+                tkMessageBox.showerror('Youtube', "Can't get video url: %s" % e.output)
+                return
+            print("Got direct video url: %s" % url)
+            sys.stdout.flush()
         player = PlayerWindow(self, url, self.player_closed)
-    def play_youtube(self, url):
-        try:
-            url = subprocess.check_output('youtube-dl -f "best[height<=?720]" -g --no-playlist -- "%s" 2>&1' % url, shell=True).strip()
-        except subprocess.CalledProcessError as e:
-            tkMessageBox.showerror('Youtube', "Can't get video url: %s" % e.output)
-            return
-        print("Got direct video url: %s" % url)
-        sys.stdout.flush()
-        self.play(url)
-        self.last_played_youtube = True
-    def cmd_play_directly(self):
+    def cmd_play(self):
         self.play(self.text.get())
-    def cmd_play_youtube(self):
-        self.play_youtube(self.text.get())
-    def cmd_playlist_play_directly(self):
+    def cmd_playlist_play(self):
         sel = self.playlist.curselection()
         if not sel:
             return
         self.play(self.playlistData[sel[0]]['url'])
-    def cmd_playlist_play_youtube(self):
-        sel = self.playlist.curselection()
-        if not sel:
-            return
-        self.play_youtube(self.playlistData[sel[0]]['url'])
     def get_youtube_playlist(self, url):
         try:
             jsonstr = subprocess.check_output('youtube-dl --flat-playlist --yes-playlist -J -- "%s"' % url, shell=True).strip()
@@ -441,10 +424,7 @@ class MainWindow(tk.Tk):
         self.playlist.activate(sel)
         self.playlist.selection_clear(0, tk.END)
         self.playlist.selection_set(sel)
-        if self.last_played_youtube:
-            self.cmd_playlist_play_youtube()
-        else:
-            self.cmd_playlist_play_directly()
+        self.cmd_playlist_play()
 
 
 def main():

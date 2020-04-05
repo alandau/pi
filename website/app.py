@@ -28,11 +28,9 @@ def action():
     url = request.args.get('url', '')
     direct_url = None
     done = True
-    if request.args.get('open', '') or request.args.get('open_and_play_directly', '') or request.args.get('open_and_play_youtube', ''):
-        if request.args.get('open_and_play_directly', ''):
-            action = ' play-directly'
-        elif request.args.get('open_and_play_youtube', ''):
-            action = ' play-youtube'
+    if request.args.get('open', '') or request.args.get('open_and_play', ''):
+        if request.args.get('open_and_play', ''):
+            action = ' play'
         else:
             action = ''
         subprocess.Popen("DISPLAY=:0 /home/pi/player/player.py '%s'%s" % (url, action), shell=True)
@@ -79,8 +77,8 @@ def playlist():
         playlists = [[(f[:-4].decode('utf-8'),url_for('playlist', name=f))] for f in sorted(os.listdir(PLAYLIST_DIR)) if f.endswith('.m3u')]
         return render_template('table.html', columns=['Playlist'], rows=playlists)
     data = load_playlist(name)
-    playlist = [[('Direct', item['url']), ('Youtube', url_for('getyt', url=item['url'])), (item['title'].decode('utf-8'), None)] for item in data]
-    return render_template('table.html', columns=['Direct', 'Youtube', 'Title'], rows=playlist)
+    playlist = [[('Play', item['url'] if item['url'].endswith(('.mp4', '.m3u8')) else url_for('getyt', url=item['url'])), (item['title'].decode('utf-8'), None)] for item in data]
+    return render_template('table.html', columns=['Play', 'Title'], rows=playlist)
 
 @app.route("/getyt")
 def getyt():
