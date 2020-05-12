@@ -28,14 +28,18 @@ def sanitifyFilename(name):
     return name.replace('/', '-').replace('\n',' ')
 
 class PlayerWindow(tk.Toplevel):
-    def __init__(self, master, url, close_callback=None):
+    def __init__(self, master, url, close_callback, start_time):
         tk.Toplevel.__init__(self, master)
         self.close_callback = close_callback
         self.geometry('500x500')
         self.attributes("-fullscreen", True)
         self.after_idle(lambda: (self.lift(), self.attributes("-topmost", True)))
         dbus_filename = '/tmp/omxplayerdbus.' + getuser()
-        self.omx = subprocess.Popen(['/usr/bin/omxplayer', '-g', '--aspect-mode', 'letterbox', '--avdict', 'reconnect:1,reconnect_at_eof:1', url])
+        args = ['/usr/bin/omxplayer', '--aspect-mode', 'letterbox', '--avdict', 'reconnect:1,reconnect_at_eof:1']
+        if start_time:
+            args.extend(['--pos', start_time])
+        args.append(url)
+        self.omx = subprocess.Popen(args)
         retries = 20
         while True:
             try:
@@ -234,7 +238,7 @@ class PlayerWindow(tk.Toplevel):
 
 
 class MainWindow(tk.Tk):
-    def __init__(self, url=None, action=None):
+    def __init__(self, url, action, start_time):
         tk.Tk.__init__(self)
         self.geometry('1200x400')
         frame = tk.Frame(self)
@@ -299,21 +303,22 @@ class MainWindow(tk.Tk):
         self.playlistTitle = 'playlist'
 
         if action == 'play':
-            self.after_idle(self.cmd_play)
+            self.after_idle(lambda: self.cmd_play(start_time))
         elif action == 'get-youtube-playlist':
             self.cmd_get_youtube_playlist()
-    def play(self, url):
+    def play(self, url, start_time=None):
         if not (url.endswith('.mp4') or url.endswith('.m3u8')):
             try:
-                url = subprocess.check_output('youtube-dl -f "best[height<=?720]" -g --no-playlist -- "%s" 2>&1' % url, shell=True).strip()
+                args = ['youtube-dl', '-f', 'best[height<=?720]', '-g', '--no-playlist', '--', url]
+                url = subprocess.check_output(args, stderr=subprocess.STDOUT).strip()
             except subprocess.CalledProcessError as e:
                 tkMessageBox.showerror('Youtube', "Can't get video url: %s" % e.output)
                 return
             print("Got direct video url: %s" % url)
             sys.stdout.flush()
-        player = PlayerWindow(self, url, self.player_closed)
-    def cmd_play(self):
-        self.play(self.text.get())
+        player = PlayerWindow(self, url, self.player_closed, start_time)
+    def cmd_play(self, start_time=None):
+        self.play(self.text.get(), start_time)
     def cmd_playlist_play(self):
         sel = self.playlist.curselection()
         if not sel:
@@ -321,7 +326,8 @@ class MainWindow(tk.Tk):
         self.play(self.playlistData[sel[0]]['url'])
     def get_youtube_playlist(self, url):
         try:
-            jsonstr = subprocess.check_output('youtube-dl --flat-playlist --yes-playlist -J -- "%s"' % url, shell=True).strip()
+            args = ['youtube-dl', '--flat-playlist', '--yes-playlist', '-J', '--', url]
+            jsonstr = subprocess.check_output(args, stderr=subprocess.STDOUT).strip()
         except subprocess.CalledProcessError as e:
             tkMessageBox.showerror('Youtube', "Can't get playlist: %s" % e.output)
             return
@@ -427,14 +433,26 @@ class MainWindow(tk.Tk):
         self.cmd_playlist_play()
 
 
+def time_str_to_sec(s):
+    if ':' not in s:
+        return s
+    a = s.split(':')
+    # If mm:ss, prepend hh:
+    if len(a) == 2:
+        a.insert(0, '0')
+    return ':'.join(a)
+
 def main():
     url = None
     action = None
+    start_time = None
     if len(sys.argv) >= 2:
         url = sys.argv[1]
         if len(sys.argv) >= 3:
             action = sys.argv[2]
-    root = MainWindow(url, action)
+            if len(sys.argv) >= 4:
+                start_time = time_str_to_sec(sys.argv[3])
+    root = MainWindow(url, action, start_time)
     root.mainloop()
 
 if __name__ == '__main__':

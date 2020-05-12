@@ -10,7 +10,8 @@ app = Flask(__name__)
 
 def get_yt_url(url):
     try:
-        return subprocess.check_output('youtube-dl -f "best[height<=?720]" -g --no-playlist -- "%s" 2>&1' % url, shell=True).strip()
+        args = ['youtube-dl', '-f', 'best[height<=?720]', '-g', '--no-playlist', '--', url]
+        return subprocess.check_output(args, stderr=subprocess.STDOUT).strip()
     except subprocess.CalledProcessError as e:
         return None
 
@@ -26,16 +27,18 @@ def main():
 @app.route("/action")
 def action():
     url = request.args.get('url', '')
+    start_time = request.args.get('start_time')
     direct_url = None
     done = True
     if request.args.get('open', '') or request.args.get('open_and_play', ''):
+        player_args = ['/home/pi/player/player.py', url]
         if request.args.get('open_and_play', ''):
-            action = ' play'
-        else:
-            action = ''
-        subprocess.Popen("DISPLAY=:0 /home/pi/player/player.py '%s'%s" % (url, action), shell=True)
+            player_args.append('play')
+            if start_time:
+                player_args.append(start_time)
+        subprocess.Popen(player_args, env=dict(os.environ, DISPLAY=":0"))
     elif request.args.get('browser', ''):
-        subprocess.Popen("DISPLAY=:0 xdg-open '%s'" % url, shell=True)
+        subprocess.Popen(['xdg-open', url], env=dict(os.environ, DISPLAY=":0"))
     elif request.args.get('yt', ''):
         direct_url = get_yt_url(url)
         if not direct_url:
