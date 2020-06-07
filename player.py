@@ -4,6 +4,7 @@ import sys
 import Tkinter as tk
 import tkMessageBox
 import tkFileDialog
+import tkFont
 import dbus
 import os.path
 import time
@@ -240,6 +241,8 @@ class PlayerWindow(tk.Toplevel):
 class MainWindow(tk.Tk):
     def __init__(self, url, action, start_time):
         tk.Tk.__init__(self)
+        for fontname in ("TkDefaultFont", "TkTextFont", "TkMenuFont"):
+            tkFont.nametofont(fontname).configure(size=-14)
         self.geometry('1200x400')
         frame = tk.Frame(self)
         frame.pack(fill=tk.X)
