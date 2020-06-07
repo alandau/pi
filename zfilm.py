@@ -65,11 +65,11 @@ class ZfilmIE(InfoExtractor):
         headers['Referer'] = iframe_url
         iframe_page = self._download_webpage(iframe_url, video_id, headers=headers)
 
-        videocdn = re.search(r'<script.*?"src":"(https://cdn.720-serie.top/[^"]*)".*?</script', iframe_page)
+        videocdn = re.search(r'"(https://cdn.hdfilmi-hd.xyz/[^"]*)"', iframe_page)
         if videocdn:
             return extract_with_index(self.extract_videocdn(videocdn.group(1), iframe_url, video_id, headers))
 
-        assistir = re.search(r'<script.*?"src":"(https://[a-z0-9-]*\.assistir-filme\.biz[^"]*)".*?</script', iframe_page)
+        assistir = re.search(r'"(https://[a-z0-9-]*\.assistir-filme\.biz[^"]*)"', iframe_page)
         if assistir:
             return extract_with_index(self.extract_assistir(assistir.group(1), iframe_url, video_id, headers))
 
@@ -158,7 +158,7 @@ class ZfilmIE(InfoExtractor):
     def extract_assistir(self, url, origurl, video_id, headers):
         headers['Referer'] = origurl
         final_page = self._download_webpage(url, video_id, headers=headers)
-        file_text = self._search_regex(r'file:([^\n]*)', final_page, video_id)
+        file_text = self._search_regex(r'file:\s*([^\n]*)', final_page, video_id)
 
         if file_text.endswith('\n'):
             file_text = file_text[:-1]
