@@ -25,6 +25,11 @@ def secToStr(sec):
     else:
         return '%d:%02d:%02d' % (sec // 3600, (sec // 60) % 60, sec % 60)
 
+def sizeToStr(size):
+    if size is None:
+        return None
+    return '%d MB' % (size // 1024 // 1024)
+
 def sanitifyFilename(name):
     return name.replace('/', '-').replace('\n',' ')
 
@@ -237,6 +242,33 @@ class PlayerWindow(tk.Toplevel):
         if event.char == ' ':
             pass
 
+class ListDialog(tk.Toplevel):
+    def __init__(self, parent, items):
+        tk.Toplevel.__init__(self, parent)
+        self.items = items
+        self.transient(parent)
+        self.title('Formats')
+
+        frame = tk.Frame(self)
+        frame.pack(fill=tk.BOTH, expand=1)
+        self.listbox = tk.Listbox(frame)
+        self.listbox.pack(fill=tk.BOTH, expand=1)
+        self.listbox.bind('<Double-Button-1>', lambda e: self.execute())
+        for (title, _) in items:
+            self.listbox.insert(tk.END, title)
+        #self.grab_set()
+        self.protocol("WM_DELETE_WINDOW", self.destroy)
+        (w, h) = (500, 250)
+        x = parent.winfo_rootx() + (parent.winfo_width() - w) / 2
+        y = parent.winfo_rooty() + (parent.winfo_height() - h) / 2
+        self.geometry("%dx%d+%d+%d" % (w, h, x, y))
+        #self.wait_window(self)
+    def execute(self):
+        sel = self.listbox.curselection()
+        if not sel:
+            return
+        (_, cb) = self.items[sel[0]]
+        cb()
 
 class MainWindow(tk.Tk):
     def __init__(self, url, action, start_time):
@@ -273,7 +305,8 @@ class MainWindow(tk.Tk):
 
         frame = tk.Frame(self)
         frame.pack()
-        bb=tk.Button(frame, text='Play', command=lambda: (self.autoplay.set(0), self.cmd_play())).pack(side=tk.LEFT)
+        tk.Button(frame, text='Play', command=lambda: (self.autoplay.set(0), self.cmd_play())).pack(side=tk.LEFT)
+        tk.Button(frame, text='Show formats', command=self.cmd_show_formats).pack(side=tk.LEFT)
         tk.Button(frame, text='Get Youtube playlist', command=self.cmd_get_youtube_playlist).pack(side=tk.LEFT)
         tk.Button(frame, text='Add to playlist', command=self.cmd_add_to_playlist).pack(side=tk.LEFT)
 
@@ -288,6 +321,7 @@ class MainWindow(tk.Tk):
         self.playlists.bind('<ButtonRelease-1>', lambda e: self.load_playlist())
         self.playlist = tk.Listbox(frame)
         self.playlist.grid(row=0, column=1, sticky=tk.N+tk.S+tk.W+tk.E)
+        self.playlist.bind('<Double-Button-1>', lambda e: self.cmd_playlist_play())
 
         fr = tk.Frame(frame)
         fr.grid(row=1, column=0)
@@ -296,6 +330,7 @@ class MainWindow(tk.Tk):
         fr = tk.Frame(frame)
         fr.grid(row=1, column=1)
         tk.Button(fr, text="Play", command=self.cmd_playlist_play).pack(side=tk.LEFT)
+        tk.Button(fr, text='Show formats', command=self.cmd_playlist_show_formats).pack(side=tk.LEFT)
         tk.Button(fr, text='Get Youtube playlist', command=self.cmd_playlist_get_youtube_playlist).pack(side=tk.LEFT)
         tk.Button(fr, text="Save playlist", command=self.cmd_playlist_save).pack(side=tk.LEFT)
         self.autoplay = tk.IntVar()
@@ -327,6 +362,34 @@ class MainWindow(tk.Tk):
         if not sel:
             return
         self.play(self.playlistData[sel[0]]['url'])
+    def show_formats(self, url):
+        try:
+            args = ['youtube-dl', '--no-playlist', '-J', '--', url]
+            jsonstr = subprocess.check_output(args, stderr=subprocess.STDOUT).strip()
+        except subprocess.CalledProcessError as e:
+            tkMessageBox.showerror('Youtube', "Can't get formats: %s" % e.output)
+            return
+        try:
+            j = json.loads(jsonstr)
+        except ValueError as e:
+            tkMessageBox.showerror('Youtube', "Can't decode json formats: %s" % e)
+            return
+        formats = []
+        for f in j['formats']:
+            if f.get('vcodec') == 'none' or f.get('acodec') == 'none':
+                continue
+            parts = [f['format'], f.get('ext'), sizeToStr(f.get('filesize'))]
+            title = ' - '.join(p for p in parts if p is not None)
+            cb = (lambda url: lambda: self.play(url))(f['url'])
+            formats.append((title, cb))
+        ListDialog(self, formats)
+    def cmd_show_formats(self):
+        self.show_formats(self.text.get())
+    def cmd_playlist_show_formats(self):
+        sel = self.playlist.curselection()
+        if not sel:
+            return
+        self.show_formats(self.playlistData[sel[0]]['url'])
     def get_youtube_playlist(self, url):
         try:
             args = ['youtube-dl', '--flat-playlist', '--yes-playlist', '-J', '--', url]
