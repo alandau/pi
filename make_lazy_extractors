@@ -1,0 +1,7 @@
+#!/bin/sh
+
+cd ~/youtube-dl
+rm -f youtube_dl/extractor/lazy_extractors.pyc
+make lazy-extractors
+extr=$(sed -n 's/^_ALL_CLASSES = \[\(.*\)\]/\1/p' youtube_dl/extractor/lazy_extractors.py | tr -d ' ' | tr ',' '\n' | grep -E 'Youtube|Zfilm|Generic' | tr '\n' ',')
+sed -i "s/^_ALL_CLASSES = .*/_ALL_CLASSES = [$extr]/" youtube_dl/extractor/lazy_extractors.py
