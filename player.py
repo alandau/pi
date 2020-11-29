@@ -405,6 +405,7 @@ class MainWindow(tk.Tk):
         self.playlist.delete(0, tk.END)
         self.playlistData = []
         self.playlistTitle = sanitifyFilename(j.get('title', ''))
+        self.title(j.get('title', 'Unknown'))
         try:
             for e in j['entries']:
                 title = e.get('title', e['url'])

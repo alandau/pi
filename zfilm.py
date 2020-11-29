@@ -64,18 +64,20 @@ class ZfilmIE(InfoExtractor):
         iframe_url = self._search_regex(r'<iframe .*?src="([^"]+assistir-filme\.biz/video(?:\?[^"]*)?)"', main_page, video_id)
         headers['Referer'] = iframe_url
         iframe_page = self._download_webpage(iframe_url, video_id, headers=headers)
+        title = re.search(r'<title>(.*?)</title>', iframe_page)
+        title = title.group(1) if title else None
 
-        videocdn = re.search(r'"(https://cdn.hdfilmi-hd.xyz/[^"]*)"', iframe_page)
+        videocdn = re.search(r'"(https://(?:cdnv\d.hdfilmi-hd.xyz|cdn.balanser.site)/[^"]*)"', iframe_page)
         if videocdn:
-            return extract_with_index(self.extract_videocdn(videocdn.group(1), iframe_url, video_id, headers))
+            return extract_with_index(self.extract_videocdn(videocdn.group(1), iframe_url, video_id, headers, title))
 
         assistir = re.search(r'"(https://[a-z0-9-]*\.assistir-filme\.biz[^"]*)"', iframe_page)
         if assistir:
-            return extract_with_index(self.extract_assistir(assistir.group(1), iframe_url, video_id, headers))
+            return extract_with_index(self.extract_assistir(assistir.group(1), iframe_url, video_id, headers, title))
 
         raise ExtractorError('Not zfilm or assistir-filme')
 
-    def extract_videocdn(self, url, origurl, video_id, headers):
+    def extract_videocdn(self, url, origurl, video_id, headers, playlist_title):
         final_page = self._download_webpage(url, video_id, headers=headers)
         videoType = self._search_regex(r'<input type="hidden" id="videoType" value="([^"]*)">', final_page, video_id) # 'movie' or 'tv_series'
         encoded = self._search_regex(r'<input type="hidden" id="files" value="([^"]*)">', final_page, video_id)
@@ -152,10 +154,10 @@ class ZfilmIE(InfoExtractor):
             entries = []
             for (translation, s) in d.items():
                 entries.extend(get_playlist_entries(s, translations_dict.get(translation, translation)))
-            return self.playlist_result(entries)
+            return self.playlist_result(entries, playlist_title=playlist_title)
         raise ExtractorError('videocdn unknown videoType {}'.format(videoType))
 
-    def extract_assistir(self, url, origurl, video_id, headers):
+    def extract_assistir(self, url, origurl, video_id, headers, playlist_title):
         headers['Referer'] = origurl
         final_page = self._download_webpage(url, video_id, headers=headers)
         file_text = self._search_regex(r'file:\s*([^\n]*)', final_page, video_id)
@@ -187,4 +189,4 @@ class ZfilmIE(InfoExtractor):
                     videourl = episode_dict['file']
                     entries.append(dict(id=videourl, title=title, url=videourl))
 
-        return self.playlist_result(entries)
+        return self.playlist_result(entries, playlist_title=playlist_title)
