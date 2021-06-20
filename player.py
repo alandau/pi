@@ -41,7 +41,7 @@ class PlayerWindow(tk.Toplevel):
         self.attributes("-fullscreen", True)
         self.after_idle(lambda: (self.lift(), self.attributes("-topmost", True)))
         dbus_filename = '/tmp/omxplayerdbus.' + getuser()
-        args = ['/usr/bin/omxplayer', '--aspect-mode', 'letterbox', '--avdict', 'reconnect:1,reconnect_at_eof:1']
+        args = ['/usr/bin/omxplayer', '--aspect-mode', 'letterbox', '--avdict', 'reconnect:1,reconnect_at_eof:1', '-o', 'hdmi']
         if start_time:
             args.extend(['--pos', start_time])
         args.append(url)
