@@ -378,7 +378,7 @@ class MainWindow(tk.Tk):
         for f in j['formats']:
             if f.get('vcodec') == 'none' or f.get('acodec') == 'none':
                 continue
-            parts = [f['format'], f.get('ext'), sizeToStr(f.get('filesize'))]
+            parts = [f['format'], 'm3u8' if f.get('ext') == 'm3u8' or f.get('protocol') == 'm3u8' else f.get('ext'), sizeToStr(f.get('filesize'))]
             title = ' - '.join(p for p in parts if p is not None)
             cb = (lambda url: lambda: self.play(url))(f['url'])
             formats.append((title, cb))

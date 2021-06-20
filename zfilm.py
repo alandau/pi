@@ -45,6 +45,7 @@ class ZfilmIE(InfoExtractor):
                     return result
                 for (i, e) in enumerate(result['entries']):
                     if 'formats' in e:
+                        # Delete formats to prevent the zfilm:// URL below to be overriden to a resolved .mp4 URL
                         del e['formats']
                     e['url'] = 'zfilm://?' + compat_urllib_parse_urlencode({'url': url, 'player': player, 'index': i})
                 return result
@@ -87,17 +88,34 @@ class ZfilmIE(InfoExtractor):
         if player is not None:
             player_dict = {player: player_dict[player]}
         for name, (func, use_extract) in player_dict.items():
-            #print('trying player %s' % name)
             m = re.search(r'data-src="([^"]*)".*?data-name="%s"' % name, iframe_page)
             if not m:
                 continue
             try:
                 res = func(m.group(1), iframe_url, video_id, headers, title, index)
-                #print('success')
             except Exception as e:
                 last_exception = e
-                #print(e)
                 continue
+
+            # Add mp4 or m3u8 to title
+            def update_title(e):
+                if 'formats' in e:
+                    if all(f['url'].endswith('.mp4') for f in e['formats']):
+                        e['title'] += ' (mp4)'
+                    elif all(f['url'].endswith('.m3u8') for f in e['formats']):
+                        e['title'] += ' (m3u8)'
+                else:
+                    if e['url'].endswith('.mp4'):
+                        e['title'] += ' (mp4)'
+                    elif e['url'].endswith('.m3u8'):
+                        e['title'] += ' (m3u8)'
+
+            if res.get('_type') == 'playlist':
+                for e in res['entries']:
+                    update_title(e)
+            else:
+                update_title(res)
+
             if use_extract:
                 res = extract_with_index(res, name)
             if result is None:
@@ -105,7 +123,6 @@ class ZfilmIE(InfoExtractor):
                 if self._downloader.params.get('noplaylist'):
                     break
             elif result.get('_type') == 'playlist':
-                #print('type is playlist')
                 if res.get('_type') == 'playlist':
                     result['entries'].extend(res['entries'])
                 else:
@@ -129,7 +146,7 @@ class ZfilmIE(InfoExtractor):
         videoType = self._search_regex(r'<input type="hidden" id="videoType" value="([^"]*)">', final_page, video_id) # 'movie' or 'tv_series'
         encoded = self._search_regex(r'<input type="hidden" id="files" value="([^"]*)">', final_page, video_id)
         encoded = encoded.replace('&quot;', '"')
-        encoded_json = json.loads(encoded)
+        encoded_json = json.loads(encoded, object_pairs_hook=OrderedDict)
 
         # Get translations
         translations_dict = {}
@@ -137,13 +154,13 @@ class ZfilmIE(InfoExtractor):
         m = re.search(r'<div class="translations">.*?</div>', final_page, flags=re.S)
         if m:
             s = m.group(0)
-            for m in re.finditer(r'<option\s+value="([^"]+)"\s+(selected="selected")?\s*>\s+([^<]+?)\s*</option>', s):
+            for m in re.finditer(r'<option\s+value="([^"]+)"(\s+selected="selected")?\s*>\s+([^<]+?)\s*</option>', s):
                 translations_dict[m.group(1)] = m.group(3)
                 if m.group(2) is not None:
                     default_translation = m.group(1)
 
         # translation -> playlist
-        d = {}
+        d = OrderedDict()
         for (k,v) in encoded_json.items():
             v = v[1:] # discard initial '#'
             hexstr = ''.join(v[i] for i in range(len(v)) if i % 3 != 0)
