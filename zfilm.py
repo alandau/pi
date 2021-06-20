@@ -23,10 +23,10 @@ class ZfilmIE(InfoExtractor):
     # https://w.online-life-hd.xyz/
     _VALID_URL = r'(?P<id>https?://[a-z0-9-]*\.?(?:zfilm-hd\.net|kinogo-hd\.icu)/.*|(zfilm://.*))'
 
-    UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:62.0) Gecko/20100101 Firefox/62.0'
+    UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:79.0) Gecko/20100101 Firefox/79.0'
 
     def _real_extract(self, url):
-        headers = {'User-Agent': self.UA, 'Referer': url}
+        headers = {'User-Agent': self.UA}
         video_id = self._match_id(url)
 
         if url.startswith('zfilm://'):
