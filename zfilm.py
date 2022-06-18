@@ -21,12 +21,13 @@ class ZfilmIE(InfoExtractor):
     IE_DESC = 'Zfilm-Online videos'
     # https://e.zfilm-online.xyz/
     # https://w.online-life-hd.xyz/
-    _VALID_URL = r'(?P<id>https?://[a-z0-9-]*\.?(?:zfilm-hd\.net|kinogo-hd\.icu)/.*|(zfilm://.*))'
+    _VALID_URL = r'(?P<id>https?://[^/]*(?:zfilm-hd\.net|kinogo-net\.|kinogo\.eu).*|(zfilm://.*))'
 
-    UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:79.0) Gecko/20100101 Firefox/79.0'
+    UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0'
+    Cookies = ''
 
     def _real_extract(self, url):
-        headers = {'User-Agent': self.UA}
+        headers = {'User-Agent': self.UA, 'Cookie': self.Cookies, 'Accept': '*/*', 'Accept-Encoding': '', 'Accept-Charset': '', 'Accept-Language': ''}
         video_id = self._match_id(url)
 
         if url.startswith('zfilm://'):
@@ -39,21 +40,11 @@ class ZfilmIE(InfoExtractor):
             player = None
             index = None
 
-        def extract_with_index(result, player, index=index):
-            if index is None:
-                if 'entries' not in result:
-                    return result
-                for (i, e) in enumerate(result['entries']):
-                    if 'formats' in e:
-                        # Delete formats to prevent the zfilm:// URL below to be overriden to a resolved .mp4 URL
-                        del e['formats']
-                    e['url'] = 'zfilm://?' + compat_urllib_parse_urlencode({'url': url, 'player': player, 'index': i})
-                return result
-            if 'entries' not in result:
-                return result
-            return result['entries'][index]
+        if '//kinogo' in url:
+            return self.extract_kinogo(url, video_id, player, index)
 
         main_page = self._download_webpage(url, video_id, headers=headers, expected_status=(200, 301, 302, 404))
+
         REDIRECT_REGEX = r'[0-9]{,2};\s*(?:URL|url)=\'?([^\'"]+)'
         metare = re.compile(
             r'(?i)<meta\s+(?=(?:[a-z-]+="[^"]+"\s+)*http-equiv="refresh")'
@@ -97,27 +88,10 @@ class ZfilmIE(InfoExtractor):
                 last_exception = e
                 continue
 
-            # Add mp4 or m3u8 to title
-            def update_title(e):
-                if 'formats' in e:
-                    if all(f['url'].endswith('.mp4') for f in e['formats']):
-                        e['title'] += ' (mp4)'
-                    elif all(f['url'].endswith('.m3u8') for f in e['formats']):
-                        e['title'] += ' (m3u8)'
-                else:
-                    if e['url'].endswith('.mp4'):
-                        e['title'] += ' (mp4)'
-                    elif e['url'].endswith('.m3u8'):
-                        e['title'] += ' (m3u8)'
-
-            if res.get('_type') == 'playlist':
-                for e in res['entries']:
-                    update_title(e)
-            else:
-                update_title(res)
-
+            self.postprocess_playlist(res)
             if use_extract:
-                res = extract_with_index(res, name)
+                res = self.extract_with_index(res, url, name, index)
+
             if result is None:
                 result = res
                 if self._downloader.params.get('noplaylist'):
@@ -141,6 +115,40 @@ class ZfilmIE(InfoExtractor):
 
         raise last_exception
 
+    def extract_with_index(self, result, url, player, index):
+        if index is None:
+            if 'entries' not in result:
+                return result
+            for (i, e) in enumerate(result['entries']):
+                if 'formats' in e:
+                    # Delete formats to prevent the zfilm:// URL below to be overriden to a resolved .mp4 URL
+                    del e['formats']
+                e['url'] = 'zfilm://?' + compat_urllib_parse_urlencode({'url': url, 'player': player, 'index': i})
+            return result
+        if 'entries' not in result:
+            return result
+        return result['entries'][index]
+
+    def postprocess_playlist(self, res):
+        # Add mp4 or m3u8 to title
+        def update_title(e):
+            if 'formats' in e:
+                if all(f['url'].endswith('.mp4') for f in e['formats']):
+                    e['title'] += ' (mp4)'
+                elif all(f['url'].endswith('.m3u8') for f in e['formats']):
+                    e['title'] += ' (m3u8)'
+            else:
+                if e['url'].endswith('.mp4'):
+                    e['title'] += ' (mp4)'
+                elif e['url'].endswith('.m3u8'):
+                    e['title'] += ' (m3u8)'
+
+        if res.get('_type') == 'playlist':
+            for e in res['entries']:
+                update_title(e)
+        else:
+            update_title(res)
+
     def extract_videocdn(self, url, origurl, video_id, headers, playlist_title, index):
         final_page = self._download_webpage(url, video_id, headers=headers)
         videoType = self._search_regex(r'<input type="hidden" id="videoType" value="([^"]*)">', final_page, video_id) # 'movie' or 'tv_series'
@@ -159,12 +167,21 @@ class ZfilmIE(InfoExtractor):
                 if m.group(2) is not None:
                     default_translation = m.group(1)
 
+        userKey = None
+        m = re.search(r'var userKey = "([^"]*)"', final_page, flags=re.S)
+        if m:
+            userKey = m.group(1)
         # translation -> playlist
         d = OrderedDict()
         for (k,v) in encoded_json.items():
-            v = v[1:] # discard initial '#'
-            hexstr = ''.join(v[i] for i in range(len(v)) if i % 3 != 0)
-            d[k] = binascii.unhexlify(hexstr)
+            if v.startswith('#'):
+                v = v[1:] # discard initial '#'
+                hexstr = ''.join(v[i] for i in range(len(v)) if i % 3 != 0)
+                d[k] = binascii.unhexlify(hexstr)
+            else:
+                d[k] = v
+            if userKey is not None:
+                d[k] = d[k].replace(userKey, ".mp4")
 
         if default_translation is None and index is not None:
             try:
@@ -180,9 +197,14 @@ class ZfilmIE(InfoExtractor):
                 if u.startswith('//'):
                     u = 'https:' + u
                 fmt = {'url': u}
-                m = re.search(r'/([0-9]+)\.mp4$', u)
+                m = re.search(r'/([0-9]+)\.(mp4|m3u8)', u)
                 if m:
                     fmt['height'] = int(m.group(1))
+                    if m.group(2) == 'm3u8':
+                        # For some reason ffmpeg doesn't choose the best resolution (program)
+                        # variant from a multi-resolution m3u8 playlist, so do so manually
+                        u = u[:-4] + 'mp4:hls:manifest.m3u8'
+                        fmt['url'] = u
                 formats.append(fmt)
             return formats
 
@@ -202,11 +224,11 @@ class ZfilmIE(InfoExtractor):
             return entries
 
         if videoType == 'movie':
-            if len(d) == 1 or self._downloader.params.get('noplaylist'):
+            if index is None and (len(d) == 1 or self._downloader.params.get('noplaylist')):
                 if default_translation is not None and default_translation in d:
                     translation = d[default_translation]
                 else:
-                    translation = d.values()[0]
+                    translation = next(iter(d.values()))
                 formats = get_one_video_formats(translation)
                 return {
                     'id': video_id,
@@ -263,3 +285,17 @@ class ZfilmIE(InfoExtractor):
                     entries.append(dict(id=videourl, title=title, url=videourl))
 
         return self.playlist_result(entries, playlist_title=playlist_title)
+
+    def extract_kinogo(self, url, video_id, player, index):
+        main_page = self._download_webpage(url, video_id)
+        iframe_url = self._search_regex(r'<iframe .*?src="(//vcdn\.icdn\.ws/[^"]+|https://51.tvmovies.in/[^"]+)"', main_page, video_id)
+        if iframe_url.startswith('//'):
+            iframe_url = 'https:' + iframe_url
+
+        title = re.search(r'<meta property="og:title" content="([^"]*)"', main_page)
+        title = title.group(1) if title else None
+
+        res = self.extract_videocdn(iframe_url, iframe_url, video_id, {}, title, index)
+        self.postprocess_playlist(res)
+        res = self.extract_with_index(res, url, 'kinogo', index)
+        return res
