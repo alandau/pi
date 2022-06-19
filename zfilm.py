@@ -206,6 +206,7 @@ class ZfilmIE(InfoExtractor):
                         u = u[:-4] + 'mp4:hls:manifest.m3u8'
                         fmt['url'] = u
                 formats.append(fmt)
+            self._sort_formats(formats)
             return formats
 
         def get_playlist_entries(text, translation):
