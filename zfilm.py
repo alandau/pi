@@ -186,7 +186,7 @@ class ZfilmIE(InfoExtractor):
         if default_translation is None and index is not None:
             try:
                 default_translation = d.keys()[index]
-            except IndexError:
+            except (IndexError, TypeError):
                 pass
 
         def get_one_video_formats(text):
