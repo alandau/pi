@@ -480,6 +480,7 @@ class MainWindow(tk.Tk):
             self.playlistData.append(dict(url=url, title=title))
             self.playlist.insert(tk.END, title)
             title = None
+        self.title(basename)
 
     def player_closed(self, manual):
         if manual or not self.autoplay.get():
